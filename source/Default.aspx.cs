@@ -14,9 +14,10 @@ using VDS.RDF.Writing.Formatting;
 
 public partial class _Default : Page
 {
-    public string result = "", error = "";
-    public bool additionalInfoRequired = false;
+    public string targetSubject, result = "", error = "";
+    public bool additionalInfoRequired = false, shapeReady = false;
     public List<Property> foundProperties = new List<Property>();
+
     private Dictionary<string, string> prefixDictionary = new Dictionary<string, string>();
     private Dictionary<string, List<int>> propertyDictionary = new Dictionary<string, List<int>>();
     private string lastTestedPropertyValue;
@@ -45,9 +46,9 @@ public partial class _Default : Page
         }
 
         string[] propertyParts, stringParts, sourceLines = source.Text.Split(new string[] { "\r\n", "\n" }, StringSplitOptions.None);
-        int i, min, max, start = 0, breakLine = 0, startNode = 1, counter = 0, samples = 1;
+        int i, min, max, start = 0, breakLine = 0, startNode = 1, subjectCounter = 0, propertyCounter = 0, cardinalityCounter = 0, samples = 1;
         string property, record = "", currentProperty = "", cardinality = "", tmp = "", valueSet = "";
-        bool firstTime = true, newSample = true, isChecked = false;
+        bool firstTime = true, newSample = true, prevWasChecked = false, currIsChecked;
         Result test;
 
         Graph g = new Graph();
@@ -170,8 +171,8 @@ public partial class _Default : Page
                 {
                     breakLine = i;
                 }
-                counter++;
-                if (counter == startNode)
+                subjectCounter++;
+                if (subjectCounter == startNode)
                 {
                     break;
                 }
@@ -188,8 +189,8 @@ public partial class _Default : Page
         }
         else
         {
+            targetSubject = HttpUtility.HtmlEncode(sourceLines[i + 1].Trim(removeSymbols));
             record += Environment.NewLine + "my:Shape {";
-            counter = 0;
             for (int k = i + 2; k < sourceLines.Length; k++)
             {
                 property = sourceLines[k].Trim(removeSymbols);
@@ -198,12 +199,15 @@ public partial class _Default : Page
                 {
                     continue;
                 }
-                counter++;
+                cardinalityCounter++;
+                propertyCounter++;
                 tmp = "";
+                currIsChecked = false;
 
                 if (property.Length > 0)
                 {
-                    if (RadioButtonList1.SelectedValue == "datatypes")
+                    currIsChecked = isPropertyChecked(propertyParts[0]);
+                    if (!currIsChecked)
                     {
                         test = hasStringProperty(property);
                         if (test.Answer == true)
@@ -259,56 +263,75 @@ public partial class _Default : Page
                 {
                     currentProperty = tmp;
                     newSample = false;
-                    if (RadioButtonList1.SelectedValue == "values")
+                    if (currIsChecked)
                     {
                         valueSet = property.Substring(tmp.Length + 1);
                     }
                 }
-                else if (RadioButtonList1.SelectedValue == "values")
+                else if (currIsChecked)
                 {
-                    if (currentProperty == tmp)
+                    if (firstTime && cardinalityCounter > 1)
+                    {
+                        firstTime = false;
+                        cardinalityCounter--;
+                    }
+                    if (!prevWasChecked)
+                    {
+                        saveProperty(currentProperty, cardinalityCounter);
+                        currentProperty = tmp;
+                        valueSet = property.Substring(tmp.Length + 1);
+                        prevWasChecked = true;
+                        cardinalityCounter = 0;
+                    }
+                    else if (currentProperty == tmp)
                     {
                         valueSet += " " + property.Substring(tmp.Length + 1);
                     }
                     else
                     {
-                        cardinality = " [" + valueSet + "]";
-                        if (property.Length > 0)
-                        {
-                            valueSet = property.Substring(tmp.Length + 1);
-                        }
-                        record += Environment.NewLine + "\t" + currentProperty + cardinality + ";";
+                        saveProperty(currentProperty + " [" + valueSet + "]", 1);
                         currentProperty = tmp;
+                        valueSet = property.Substring(tmp.Length + 1);
                     }
                     if (tmp.Length == 0)
                     {
                         break;
                     }
                 }
-                if (RadioButtonList1.SelectedValue == "datatypes" && (currentProperty != tmp || k == sourceLines.Length - 1))
+                if (!currIsChecked && (currentProperty != tmp || k == sourceLines.Length - 1))
                 {
-                    if (firstTime && counter > 1)
+                    if (prevWasChecked)
+                    {
+                        saveProperty(currentProperty + " [" + valueSet + "]", 1);
+                        currentProperty = tmp;
+                        valueSet = "";
+                        cardinalityCounter = 1;
+                    }
+                    if (firstTime && cardinalityCounter > 1)
                     {
                         firstTime = false;
-                        counter--;
+                        cardinalityCounter--;
                     }
                     if (currentProperty == tmp && k == sourceLines.Length - 1)
                     {
-                        counter++;
+                        cardinalityCounter++;
                     }
-                    if (counter > 1)
+                    if (cardinalityCounter > 1)
                     {
-                        cardinality = "{" + counter + "}";
+                        cardinality = "{" + cardinalityCounter + "}";
                     }
                     //record += "\t" + currentProperty + cardinality + ";" + Environment.NewLine;
-                    saveProperty(currentProperty, counter);
+                    if (currentProperty.Length > 0)
+                    {
+                        saveProperty(currentProperty, cardinalityCounter);
+                    }
                     if (tmp.Length == 0)
                     {
                         if (nodeOptions.SelectedValue.Length == 0 && k + 1 <= sourceLines.Length - 1 && sourceLines[k + 1].Trim(removeSymbols).Length > 0)
                         {
                             samples++;
                             currentProperty = "";
-                            counter = 0;
+                            cardinalityCounter = 0;
                             cardinality = "";
                             firstTime = true;
                             newSample = true;
@@ -322,11 +345,16 @@ public partial class _Default : Page
                     if (currentProperty != tmp && k == sourceLines.Length - 1)
                     {
                         //record += "\t" + tmp + Environment.NewLine;
+                        if (tmp.Length > 0)
+                        {
+                            currentProperty = tmp;
+                        }
                         saveProperty(currentProperty, 1);
                     }
                     currentProperty = tmp;
-                    counter = 0;
+                    cardinalityCounter = 0;
                     cardinality = "";
+                    prevWasChecked = false;
                 }
             }
             i = 0;
@@ -366,8 +394,8 @@ public partial class _Default : Page
                     cardinality = "";
                 }
                 record += Environment.NewLine + "\t" + key + cardinality + ";";
-                isChecked = (Page.IsPostBack && Request.Form["Checkbox" + i] == "1");
-                foundProperties.Add(new Property(i, key + cardinality, isChecked));
+                currIsChecked = isPropertyChecked(key, true);
+                foundProperties.Add(new Property(i, HttpUtility.HtmlEncode(key + cardinality), currIsChecked));
                 i++;
             }
             record = record.TrimEnd(';') + Environment.NewLine;
@@ -525,6 +553,7 @@ public partial class _Default : Page
                 }
             }
             resultText.Text = prefixes + shape;
+            shapeReady = true;
         }
     }
 
@@ -564,6 +593,35 @@ public partial class _Default : Page
         {
             propertyDictionary[key].Add(value);
         }
+    }
+
+    private bool isPropertyChecked(string property, bool splitBoth = false)
+    {
+        if (!Page.IsPostBack || Request.Form["getValueSet[]"] == null)
+        {
+            return false;
+        }
+        string[] stringParts1, stringParts2, checkedProperties = Request.Form["getValueSet[]"].Split(',');
+        foreach (string item in checkedProperties)
+        {
+            stringParts1 = item.Split(' ');
+            if (!splitBoth)
+            {
+                if (stringParts1[0] == property)
+                {
+                    return true;
+                }
+            }
+            else
+            {
+                stringParts2 = property.Split(' ');
+                if (stringParts1[0] == stringParts2[0])
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     protected void SampleList_SelectedIndexChanged(object sender, EventArgs e)

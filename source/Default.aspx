@@ -19,13 +19,13 @@
     <% if (foundProperties.Count > 0) { %>
         <div class="row">
             <div class="col-md-12">
-                <h2>The following properties were found:</h2>
+                <h2>Fine-tune constraints for the found properties of subject <%= targetSubject %>:</h2>
                 <table class="foundProperties">
                   <tr>
-                      <th>Property and its constraint</th>
+                      <th>Property and the proposed constraint *</th>
                       <th>Change cardinality</th>
-                      <th>Constrain value instead of type</th>
-                      <th>Constrain literal value</th>
+                      <th>Restrict value instead of type</th>
+                      <th>Restrict range of numerical value</th>
                   </tr>
                   <% foreach (Property item in foundProperties) { %>
                     <tr>
@@ -47,7 +47,7 @@
                             </label>
                         </td>
                         <td class="checkboxes">
-                            <input id="Checkbox<%= item.Index %>" type="checkbox" name="Checkbox<%= item.Index %>" value="1" <% if (item.Is_checked) { %> checked <% } %> />
+                            <input id="Checkbox<%= item.Index %>" type="checkbox" name="getValueSet[]" value="<%= item.Name %>" <% if (item.Is_checked) { %> checked <% } %> />
                         </td>
                         <td>
                             <select id="ValueRangeMin<%= item.Index %>" name="ValueRangeMin<%= item.Index %>">
@@ -64,28 +64,29 @@
                     </tr>
                   <% } %>
                 </table>
+                <p>* according to the available RDF data</p>
             </div>
         </div>
     <% } %>
-    <div class="row">
-        <div class="col-md-12">
-            <h2>ShEx data shape:</h2>
-            <asp:TextBox ID="resultText" TextMode="multiline" Columns="50" Rows="10" runat="server"></asp:TextBox>
+
+    <% if (shapeReady) { %>
+        <asp:Button ID="submit" runat="server" Text="Update data shape" />
+        <div class="row">
+            <div class="col-md-12">
+                <h2>ShEx data shape:</h2>
+                <asp:TextBox ID="resultText" TextMode="multiline" Columns="50" Rows="10" runat="server"></asp:TextBox>
+            </div>
         </div>
-    </div>
+    <% } else { %>
+        <asp:Button ID="Button1" runat="server" Text="Create data shape" />
+    <% } %>
+
     <% if (additionalInfoRequired) { %>
         <p class="optionDescription">Please, select the class instance for which to create the data shape:</p>
         <asp:RadioButtonList ID="nodeOptions" runat="server">
         </asp:RadioButtonList>
     <% } %>
     <asp:HiddenField ID="infoRequired" Value="0" runat="server" />
-
-    <p class="optionDescription">Apply constraints to:</p>
-    <asp:RadioButtonList ID="RadioButtonList1" runat="server">
-        <asp:ListItem Text="Node kind / literal datatype" Value="datatypes" Selected="True" />
-        <asp:ListItem Text="Value set" Value="values" />
-    </asp:RadioButtonList>
-    <asp:Button ID="submit" runat="server" Text="Create data shape" />
 
     <p class="errorMessage"><%= error %></p>
 </asp:Content>
