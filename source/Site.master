@@ -65,5 +65,7 @@
             </footer>
         </div>
     </form>
+
+    <script type="text/javascript" src="Scripts/site.js"></script>
 </body>
 </html>

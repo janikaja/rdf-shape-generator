@@ -21,7 +21,7 @@ public partial class _Default : Page
     private Dictionary<string, string> prefixDictionary = new Dictionary<string, string>();
     private Dictionary<string, List<int>> propertyDictionary = new Dictionary<string, List<int>>();
     private string lastTestedPropertyValue;
-    private char[] removeSymbols = { ';', '.', ' ', '\t' };
+    private char[] removeSymbols = { ';', '.', ' ', '\t' }, removeBrackets = { '{', '}' };
 
     protected void Page_Load(object sender, EventArgs e)
     {
@@ -46,8 +46,8 @@ public partial class _Default : Page
         }
 
         string[] propertyParts, stringParts, sourceLines = source.Text.Split(new string[] { "\r\n", "\n" }, StringSplitOptions.None);
-        int i, min, max, start = 0, breakLine = 0, startNode = 1, subjectCounter = 0, propertyCounter = 0, cardinalityCounter = 0, samples = 1;
-        string property, record = "", currentProperty = "", cardinality = "", tmp = "", valueSet = "";
+        int i, min, max, start = 0, breakLine = 0, startNode = 1, subjectCounter = 0, propertyCounter = 0, cardinalityCounter = 0, samples = 1, cardinalityIndex;
+        string property, record = "", currentProperty = "", cardinality = "", tmp = "", valueSet = "", requestedMin, requestedMax;
         bool firstTime = true, newSample = true, prevWasChecked = false, currIsChecked;
         Result test;
 
@@ -232,7 +232,7 @@ public partial class _Default : Page
                         }
                         else
                         {
-                            test = hasValueSet(propertyParts[1]);
+                            test = hasIRIWithPrefix(propertyParts[1]);
                             if (test.Answer == true)
                             {
                                 tmp = propertyParts[0] + " [" + test.Contents + "]";
@@ -266,6 +266,7 @@ public partial class _Default : Page
                     if (currIsChecked)
                     {
                         valueSet = property.Substring(tmp.Length + 1);
+                        prevWasChecked = true;
                     }
                 }
                 else if (currIsChecked)
@@ -360,42 +361,79 @@ public partial class _Default : Page
             i = 0;
             foreach (string key in propertyDictionary.Keys)
             {
-                if (propertyDictionary[key].Count < samples)
-                {
-                    min = 0;
-                }
-                else
-                {
-                    min = propertyDictionary[key].Min();
-                }
-                max = propertyDictionary[key].Max();
-                if (min == 0 && max == 1)
-                {
-                    cardinality = "?";
-                }
-                else if (min == 0 && max > 1)
-                {
-                    cardinality = "*";
-                }
-                else if (min == 1 && max > 1)
-                {
-                    cardinality = "+";
-                }
-                else if (min == max && min != 1 && key[key.Length - 1] != ']')
-                {
-                    cardinality = "{" + min + "}";
-                }
-                else if (min < max)
-                {
-                    cardinality = "{" + min + "," + max + "}";
-                }
-                else
+                requestedMin = "";
+                requestedMax = "";
+                cardinalityIndex = 0;
+                currIsChecked = isPropertyChecked(key, true);
+                cardinality = (currIsChecked) ? "N/A" : getRequestedCardinality(i);
+                if (cardinality == "error" || cardinality == "N/A")
                 {
                     cardinality = "";
+                    if (propertyDictionary[key].Count < samples)
+                    {
+                        min = 0;
+                    }
+                    else
+                    {
+                        min = propertyDictionary[key].Min();
+                    }
+                    max = propertyDictionary[key].Max();
+
+                    if (min == 0 && max == 1)
+                    {
+                        cardinality = "?";
+                    }
+                    else if (min == 0 && max > 1)
+                    {
+                        cardinality = "*";
+                    }
+                    else if (min == 1 && max > 1)
+                    {
+                        cardinality = "+";
+                    }
+                    else if (min == max && min != 1 && key[key.Length - 1] != ']')
+                    {
+                        cardinality = "{" + min + "}";
+                    }
+                    else if (min < max)
+                    {
+                        cardinality = "{" + min + "," + max + "}";
+                    }
                 }
+                else if (cardinality.Length > 0)
+                {
+                    stringParts = cardinality.Trim(removeBrackets).Split(',');
+                    if (stringParts.Length == 2)
+                    {
+                        requestedMin = stringParts[0];
+                        requestedMax = stringParts[1];
+                        cardinalityIndex = 0;
+                    }
+                    else if (stringParts[0] == "?")
+                    {
+                        requestedMin = "0";
+                        requestedMax = "1";
+                        cardinalityIndex = 2;
+                    }
+                    else if (stringParts[0] == "*")
+                    {
+                        requestedMin = "0";
+                        cardinalityIndex = 3;
+                    }
+                    else if (stringParts[0] == "+")
+                    {
+                        requestedMin = "1";
+                        cardinalityIndex = 4;
+                    }
+                    else
+                    {
+                        requestedMin = requestedMax = stringParts[0];
+                        cardinalityIndex = 1;
+                    }
+                }
+
                 record += Environment.NewLine + "\t" + key + cardinality + ";";
-                currIsChecked = isPropertyChecked(key, true);
-                foundProperties.Add(new Property(i, HttpUtility.HtmlEncode(key + cardinality), currIsChecked));
+                foundProperties.Add(new Property(i, HttpUtility.HtmlEncode(key + cardinality), currIsChecked, requestedMin, requestedMax, cardinalityIndex));
                 i++;
             }
             record = record.TrimEnd(';') + Environment.NewLine;
@@ -476,10 +514,10 @@ public partial class _Default : Page
         return (matches.Count > 0);
     }
 
-    private Result hasValueSet(string property)
+    private Result hasIRIWithPrefix(string property)
     {
-        Regex valueSetRegex = new Regex(@"^[a-z]+:[a-zA-Z]+$");
-        MatchCollection matches = valueSetRegex.Matches(property);
+        Regex prefixRegex = new Regex(@"^[a-z]+:[a-zA-Z]+$");
+        MatchCollection matches = prefixRegex.Matches(property);
         if (matches.Count > 0)
         {
             string tmp = "";
@@ -624,9 +662,119 @@ public partial class _Default : Page
         return false;
     }
 
+    private string getRequestedCardinality(int index)
+    {
+        if (
+            !Page.IsPostBack
+            ||
+            (
+                (Request.Form["min" + index] == null || Request.Form["min" + index].Length == 0)
+                &&
+                (Request.Form["cardinality" + index] == null || Request.Form["cardinality" + index] == "0")
+            )
+        )
+        {
+            return "N/A";
+        }
+
+        int min = -1, max = -1, result;
+        string cardinality = "{1}";
+
+        if (Request.Form["min" + index].Length > 0)
+        {
+            if ((result = getIntegerValue(Request.Form["min" + index])) >= 0)
+            {
+                min = result;
+            }
+        }
+
+        if (Request.Form["max" + index].Length > 0)
+        {
+            if ((result = getIntegerValue(Request.Form["max" + index])) > 0)
+            {
+                max = result;
+            }
+            else if (result == 0)
+            {
+                error = "Maximum cardinality cannot be 0!";
+                return "error";
+            }
+        }
+
+        if (min == -1 && max == -1)
+        {
+            switch (Request.Form["cardinality" + index])
+            {
+                case "1":
+                    min = max = 1;
+                    break;
+                case "2":
+                    min = 0;
+                    max = 1;
+                    break;
+                case "3":
+                    min = 0;
+                    break;
+                case "4":
+                    min = 1;
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        if (min == 0 && max == 1)
+        {
+            cardinality = "?";
+        }
+        else if (min == 0 && max == -1)
+        {
+            cardinality = "*";
+        }
+        else if (min == 1 && max == -1)
+        {
+            cardinality = "+";
+        }
+        else if (min == max && min > 1)
+        {
+            cardinality = "{" + min + "}";
+        }
+        else if (min > 0 && max == -1)
+        {
+            cardinality = "{" + min + ",}";
+        }
+        else if (min == -1 && max > 0)
+        {
+            cardinality = "{0," + max + "}";
+        }
+        else if (min < max)
+        {
+            cardinality = "{" + min + "," + max + "}";
+        }
+        else if (min > max)
+        {
+            error = "Incorrect cardinalities!";
+            return "error";
+        }
+
+        return cardinality;
+    }
+
+    private int getIntegerValue(string input)
+    {
+        int number;
+        if (Int32.TryParse(input, out number))
+        {
+            return number;
+        }
+        return -1;
+    }
+
     protected void SampleList_SelectedIndexChanged(object sender, EventArgs e)
     {
         resultText.Text = "";
         source.Text = Sample.getSample(SampleList.SelectedIndex);
+        foundProperties.Clear();
+        shapeReady = false;
     }
 }

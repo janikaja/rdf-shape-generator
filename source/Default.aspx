@@ -19,47 +19,55 @@
     <% if (foundProperties.Count > 0) { %>
         <div class="row">
             <div class="col-md-12">
-                <h2>Fine-tune constraints for the found properties of subject <%= targetSubject %>:</h2>
+                <h2 id="foundPropertiesHeading">Fine-tune constraints for the properties of subject <%= targetSubject %>:</h2>
                 <table class="foundProperties">
                   <tr>
                       <th>Property and the proposed constraint *</th>
                       <th>Change cardinality</th>
                       <th>Restrict value instead of type</th>
-                      <th>Restrict range of numerical value</th>
+                      <th>Restrict range of numeric values</th>
                   </tr>
                   <% foreach (Property item in foundProperties) { %>
                     <tr>
                         <td><%= item.Name %></td>
                         <td>
-                            <select id="Select<%= item.Index %>" name="Cardinality<%= item.Index %>">
-                                <option value="1">Exactly 1 (default)</option>
-                                <option value="2">0 or 1</option>
-                                <option value="3">>= 0</option>
-                                <option value="4">>= 1</option>
-                            </select>
-                            <label>
-                                Min
-                                <input type="number" name="min<%= item.Index %>" min="0" />
-                            </label>
-                            <label>
-                                Max
-                                <input type="number" name="max<%= item.Index %>" min="1" />
-                            </label>
+                            <% if (!item.hasValueSet()) { %>
+                                <select id="Select<%= item.Index %>" name="cardinality<%= item.Index %>" class="cardinalities" data-index="<%= item.Index %>">
+                                    <option value="0" <% if (item.Cardinality_index == 0) { %>selected<% } %>></option>
+                                    <option value="1" <% if (item.Cardinality_index == 1) { %>selected<% } %>>Exactly 1 (default)</option>
+                                    <option value="2" <% if (item.Cardinality_index == 2) { %>selected<% } %>>0 or 1 (?)</option>
+                                    <option value="3" <% if (item.Cardinality_index == 3) { %>selected<% } %>>>= 0 (*)</option>
+                                    <option value="4" <% if (item.Cardinality_index == 4) { %>selected<% } %>>>= 1 (+)</option>
+                                </select>
+                                <span class="separator">OR</span>
+                                <label>
+                                    Min
+                                    <input type="number" name="min<%= item.Index %>" min="0" value="<%= item.Min %>" class="inputCardinalities" data-index="<%= item.Index %>" />
+                                </label>
+                                <label>
+                                    Max
+                                    <input type="number" name="max<%= item.Index %>" min="1" value="<%= item.Max %>" class="inputCardinalities" data-index="<%= item.Index %>" />
+                                </label>
+                            <% } %>
                         </td>
                         <td class="checkboxes">
-                            <input id="Checkbox<%= item.Index %>" type="checkbox" name="getValueSet[]" value="<%= item.Name %>" <% if (item.Is_checked) { %> checked <% } %> />
+                            <label>
+                                <input id="Checkbox<%= item.Index %>" type="checkbox" name="getValueSet[]" value="<%= item.Name %>" <% if (item.Is_checked) { %> checked <% } %> />
+                            </label>
                         </td>
                         <td>
-                            <select id="ValueRangeMin<%= item.Index %>" name="ValueRangeMin<%= item.Index %>">
-                                <option value="1">Min inclusive</option>
-                                <option value="2">Min exclusive</option>
-                            </select>
-                            <input type="number" name="MinValue<%= item.Index %>" step="0.01" />
-                            <select id="ValueRangeMax<%= item.Index %>" name="ValueRangeMax<%= item.Index %>">
-                                <option value="1">Max inclusive</option>
-                                <option value="2">Max exclusive</option>
-                            </select>
-                            <input type="number" name="MaxValue<%= item.Index %>" step="0.01" />
+                            <% if (item.hasIntegerProperty() || item.hasFloatProperty()) { %>
+                                <select id="ValueRangeMin<%= item.Index %>" name="ValueRangeMin<%= item.Index %>">
+                                    <option value="1">Min inclusive</option>
+                                    <option value="2">Min exclusive</option>
+                                </select>
+                                <input type="number" name="MinValue<%= item.Index %>" <% if (item.hasFloatProperty()) { %>step="0.01"<% } %> />
+                                <select id="ValueRangeMax<%= item.Index %>" name="ValueRangeMax<%= item.Index %>">
+                                    <option value="1">Max inclusive</option>
+                                    <option value="2">Max exclusive</option>
+                                </select>
+                                <input type="number" name="MaxValue<%= item.Index %>" <% if (item.hasFloatProperty()) { %>step="0.01"<% } %> />
+                            <% } %>
                         </td>
                     </tr>
                   <% } %>

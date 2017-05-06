@@ -2,21 +2,25 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Web;
+using System.Text.RegularExpressions;
 
 /// <summary>
 /// Summary description for Property
 /// </summary>
 public class Property
 {
-    private int index;
-    private string name;
+    private int index, cardinality_index;
+    private string name, min, max;
     private bool is_checked;
 
-    public Property(int index, string name, bool is_checked)
+    public Property(int index, string name, bool is_checked, string min, string max, int cardinality_index)
     {
         Index = index;
         Name = name;
         Is_checked = is_checked;
+        Min = min;
+        Max = max;
+        Cardinality_index = cardinality_index;
     }
 
     public int Index
@@ -29,6 +33,19 @@ public class Property
         set
         {
             index = value;
+        }
+    }
+
+    public int Cardinality_index
+    {
+        get
+        {
+            return cardinality_index;
+        }
+
+        set
+        {
+            cardinality_index = value;
         }
     }
 
@@ -45,6 +62,32 @@ public class Property
         }
     }
 
+    public string Min
+    {
+        get
+        {
+            return min;
+        }
+
+        set
+        {
+            min = value;
+        }
+    }
+
+    public string Max
+    {
+        get
+        {
+            return max;
+        }
+
+        set
+        {
+            max = value;
+        }
+    }
+
     public bool Is_checked
     {
         get
@@ -56,5 +99,29 @@ public class Property
         {
             is_checked = value;
         }
+    }
+
+    public int getIndex()
+    {
+        return index;
+    }
+
+    public bool hasValueSet()
+    {
+        Regex valueSetRegex = new Regex(@"\[(.+)\]$");
+        MatchCollection matches = valueSetRegex.Matches(name);
+        return (matches.Count > 0);
+    }
+
+    public bool hasIntegerProperty()
+    {
+        string[] nameParts = name.Split(' ');
+        return (nameParts[1].Length >= 11 && nameParts[1].Substring(0, 11) == "xsd:integer");
+    }
+
+    public bool hasFloatProperty()
+    {
+        string[] nameParts = name.Split(' ');
+        return (nameParts[1].Length >= 9 && nameParts[1].Substring(0, 9) == "xsd:float");
     }
 }

@@ -26,6 +26,15 @@ textarea {
     resize: vertical;
 }
 
+.checkboxes label {
+    display: block;
+    margin-bottom: 0;
+    cursor: pointer;
+}
+.checkboxes input {
+    cursor: pointer;
+}
+
 #submit:hover {
     background-color: orange;
 }
@@ -55,10 +64,20 @@ textarea {
     min-width: 270px;
 }
 .foundProperties th:nth-child(2) {
-    min-width: 335px;
+    min-width: 380px;
 }
 .foundProperties th:nth-child(4) {
     min-width: 365px;
+}
+
+.foundProperties label {
+    font-weight: normal;
+}
+
+.foundProperties .separator {
+    display: inline-block;
+    margin: 0 10px;
+    font-weight: bold;
 }
 
 /* Responsive: Portrait tablets and up */
