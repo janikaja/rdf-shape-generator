@@ -24,8 +24,10 @@
                   <tr>
                       <th>Property and the proposed constraint *</th>
                       <th>Change cardinality</th>
-                      <th>Restrict value instead of type</th>
-                      <th>Restrict range of numeric values</th>
+                      <th>Create value set</th>
+                      <% if (hasNumericValues) { %>
+                        <th>Restrict range of numeric values</th>
+                      <% } %>
                   </tr>
                   <% foreach (Property item in foundProperties) { %>
                     <tr>
@@ -55,20 +57,22 @@
                                 <input id="Checkbox<%= item.Index %>" type="checkbox" name="getValueSet[]" value="<%= item.Name %>" <% if (item.Is_checked) { %> checked <% } %> />
                             </label>
                         </td>
-                        <td>
-                            <% if (item.hasIntegerProperty() || item.hasFloatProperty()) { %>
-                                <select id="ValueRangeMin<%= item.Index %>" name="ValueRangeMin<%= item.Index %>">
-                                    <option value="1">Min inclusive</option>
-                                    <option value="2">Min exclusive</option>
-                                </select>
-                                <input type="number" name="MinValue<%= item.Index %>" <% if (item.hasFloatProperty()) { %>step="0.01"<% } %> />
-                                <select id="ValueRangeMax<%= item.Index %>" name="ValueRangeMax<%= item.Index %>">
-                                    <option value="1">Max inclusive</option>
-                                    <option value="2">Max exclusive</option>
-                                </select>
-                                <input type="number" name="MaxValue<%= item.Index %>" <% if (item.hasFloatProperty()) { %>step="0.01"<% } %> />
-                            <% } %>
-                        </td>
+                        <% if (hasNumericValues) { %>
+                            <td>
+                                <% if (item.hasIntegerProperty() || item.hasFloatProperty()) { %>
+                                    <select id="ValueRangeMin<%= item.Index %>" name="valueRangeMin<%= item.Index %>">
+                                        <option value="MinInclusive" <% if (!item.Range.Is_empty && item.Range.Min_type == "MinInclusive") { %>selected<% } %>>Min inclusive</option>
+                                        <option value="MinExclusive" <% if (!item.Range.Is_empty && item.Range.Min_type == "MinExclusive") { %>selected<% } %>>Min exclusive</option>
+                                    </select>
+                                    <input type="number" name="minValue<%= item.Index %>" <% if (item.hasFloatProperty()) { %>step="0.01"<% } %> <% if (!item.Range.Is_empty) { %>value="<%= item.Range.getStandardValueMin() %>"<% } %> />
+                                    <select id="ValueRangeMax<%= item.Index %>" name="valueRangeMax<%= item.Index %>">
+                                        <option value="MaxInclusive" <% if (!item.Range.Is_empty && item.Range.Max_type == "MaxInclusive") { %>selected<% } %>>Max inclusive</option>
+                                        <option value="MaxExclusive" <% if (!item.Range.Is_empty && item.Range.Max_type == "MaxExclusive") { %>selected<% } %>>Max exclusive</option>
+                                    </select>
+                                    <input type="number" name="maxValue<%= item.Index %>" <% if (item.hasFloatProperty()) { %>step="0.01"<% } %> <% if (!item.Range.Is_empty) { %>value="<%= item.Range.getStandardValueMax() %>"<% } %> />
+                                <% } %>
+                            </td>
+                        <% } %>
                     </tr>
                   <% } %>
                 </table>

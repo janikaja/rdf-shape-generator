@@ -12,8 +12,9 @@ public class Property
     private int index, cardinality_index;
     private string name, min, max;
     private bool is_checked;
+    private Range range;
 
-    public Property(int index, string name, bool is_checked, string min, string max, int cardinality_index)
+    public Property(int index, string name, bool is_checked, string min, string max, int cardinality_index, Range range)
     {
         Index = index;
         Name = name;
@@ -21,6 +22,7 @@ public class Property
         Min = min;
         Max = max;
         Cardinality_index = cardinality_index;
+        Range = range;
     }
 
     public int Index
@@ -101,9 +103,17 @@ public class Property
         }
     }
 
-    public int getIndex()
+    public Range Range
     {
-        return index;
+        get
+        {
+            return range;
+        }
+
+        set
+        {
+            range = value;
+        }
     }
 
     public bool hasValueSet()
@@ -119,7 +129,19 @@ public class Property
         return (nameParts[1].Length >= 11 && nameParts[1].Substring(0, 11) == "xsd:integer");
     }
 
+    public static bool hasIntegerProperty2(string name)
+    {
+        string[] nameParts = name.Split(' ');
+        return (nameParts[1].Length >= 11 && nameParts[1].Substring(0, 11) == "xsd:integer");
+    }
+
     public bool hasFloatProperty()
+    {
+        string[] nameParts = name.Split(' ');
+        return (nameParts[1].Length >= 9 && nameParts[1].Substring(0, 9) == "xsd:float");
+    }
+
+    public static bool hasFloatProperty2(string name)
     {
         string[] nameParts = name.Split(' ');
         return (nameParts[1].Length >= 9 && nameParts[1].Substring(0, 9) == "xsd:float");

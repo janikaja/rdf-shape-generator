@@ -72,6 +72,7 @@ textarea {
 
 .foundProperties label {
     font-weight: normal;
+    margin: 0;
 }
 
 .foundProperties .separator {
@@ -80,10 +81,18 @@ textarea {
     font-weight: bold;
 }
 
+.row {
+    margin-top: 20px;
+}
+
 /* Responsive: Portrait tablets and up */
 @media screen and (min-width: 768px) {
     .jumbotron {
         margin-top: 20px;
+    }
+    .jumbotron h1 {
+        font-size: 42px;
+        font-weight: bold;
     }
     .body-content {
         padding: 0;

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -15,7 +16,7 @@ using VDS.RDF.Writing.Formatting;
 public partial class _Default : Page
 {
     public string targetSubject, result = "", error = "";
-    public bool additionalInfoRequired = false, shapeReady = false;
+    public bool additionalInfoRequired = false, shapeReady = false, hasNumericValues = false;
     public List<Property> foundProperties = new List<Property>();
 
     private Dictionary<string, string> prefixDictionary = new Dictionary<string, string>();
@@ -50,6 +51,7 @@ public partial class _Default : Page
         string property, record = "", currentProperty = "", cardinality = "", tmp = "", valueSet = "", requestedMin, requestedMax;
         bool firstTime = true, newSample = true, prevWasChecked = false, currIsChecked;
         Result test;
+        Range range;
 
         Graph g = new Graph();
         //TurtleParser parser = new TurtleParser();
@@ -221,10 +223,12 @@ public partial class _Default : Page
                         else if (hasIntegerProperty(propertyParts[1]))
                         {
                             tmp = propertyParts[0] + " xsd:integer";
+                            hasNumericValues = true;
                         }
                         else if (hasFloatProperty(propertyParts[1]))
                         {
                             tmp = propertyParts[0] + " xsd:float";
+                            hasNumericValues = true;
                         }
                         else if (hasIriProperty(property))
                         {
@@ -428,12 +432,26 @@ public partial class _Default : Page
                     else
                     {
                         requestedMin = requestedMax = stringParts[0];
-                        cardinalityIndex = 1;
+                        cardinalityIndex = (requestedMin == "1") ? 1 : 0;
                     }
                 }
 
-                record += Environment.NewLine + "\t" + key + cardinality + ";";
-                foundProperties.Add(new Property(i, HttpUtility.HtmlEncode(key + cardinality), currIsChecked, requestedMin, requestedMax, cardinalityIndex));
+                tmp = "";
+                range = getRange(i, Property.hasFloatProperty2(key));
+                if (!currIsChecked && !range.Is_empty)
+                {
+                    if (range.Min_value.Length > 0)
+                    {
+                        tmp = " " + range.Min_type + " " + range.Min_value;
+                    }
+                    if (range.Max_value.Length > 0)
+                    {
+                        tmp += " " + range.Max_type + " " + range.Max_value;
+                    }
+                }
+
+                record += Environment.NewLine + "\t" + key + tmp + ((cardinality.Length > 0) ? " " : "") + cardinality + ";";
+                foundProperties.Add(new Property(i, HttpUtility.HtmlEncode(key + tmp + ((cardinality.Length > 0) ? " " : "") + cardinality), currIsChecked, requestedMin, requestedMax, cardinalityIndex, range));
                 i++;
             }
             record = record.TrimEnd(';') + Environment.NewLine;
@@ -678,7 +696,7 @@ public partial class _Default : Page
         }
 
         int min = -1, max = -1, result;
-        string cardinality = "{1}";
+        string cardinality = "";
 
         if (Request.Form["min" + index].Length > 0)
         {
@@ -768,6 +786,66 @@ public partial class _Default : Page
             return number;
         }
         return -1;
+    }
+
+    private Range getRange(int index, bool floatValue = false)
+    {
+         if (
+            !Page.IsPostBack
+            ||
+            (
+                (Request.Form["minValue" + index] == null || Request.Form["minValue" + index].Length == 0)
+                &&
+                (Request.Form["maxValue" + index] == null || Request.Form["maxValue" + index].Length == 0)
+            )
+        )
+        {
+            return new Range();
+        }
+
+        int number, minValueInt = 0, maxValueInt = 0;
+        float minValueFloat = 0, maxValueFloat = 0;
+        string minValue = "", maxValue = "", minType = Request.Form["valueRangeMin" + index], maxType = Request.Form["valueRangeMax" + index];
+
+        if (!floatValue)
+        {
+            if (Int32.TryParse(Request.Form["minValue" + index], out number))
+            {
+                minValueInt = number;
+            }
+            if (Int32.TryParse(Request.Form["maxValue" + index], out number))
+            {
+                maxValueInt = number;
+            }
+            if (minValueInt > maxValueInt)
+            {
+                error = "Incorrect value range!";
+                return new Range();
+            }
+            minValue = minValueInt.ToString();
+            maxValue = maxValueInt.ToString();
+        }
+        else
+        {
+            try
+            {
+                minValueFloat = float.Parse(Request.Form["minValue" + index], CultureInfo.InvariantCulture);
+                maxValueFloat = float.Parse(Request.Form["maxValue" + index], CultureInfo.InvariantCulture);
+            }
+            catch(Exception ex)
+            {
+                error = "Incorrect value range!";
+                return new Range();
+            }
+
+            if (minValueFloat > maxValueFloat)
+            {
+                error = "Incorrect value range!";
+                return new Range();
+            }
+        }
+        
+        return new Range(minType, minValue, maxType, maxValue);
     }
 
     protected void SampleList_SelectedIndexChanged(object sender, EventArgs e)
