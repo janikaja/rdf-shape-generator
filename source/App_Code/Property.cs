@@ -118,7 +118,7 @@ public class Property
 
     public bool hasValueSet()
     {
-        Regex valueSetRegex = new Regex(@"\[(.+)\]$");
+        Regex valueSetRegex = new Regex(@"\[(.+)\]");
         MatchCollection matches = valueSetRegex.Matches(name);
         return (matches.Count > 0);
     }
@@ -135,15 +135,19 @@ public class Property
         return (nameParts[1].Length >= 11 && nameParts[1].Substring(0, 11) == "xsd:integer");
     }
 
-    public bool hasFloatProperty()
+    public bool hasDecimalProperty()
     {
         string[] nameParts = name.Split(' ');
-        return (nameParts[1].Length >= 9 && nameParts[1].Substring(0, 9) == "xsd:float");
+        return (nameParts[1].Length >= 11 && nameParts[1].Substring(0, 11) == "xsd:decimal");
     }
 
-    public static bool hasFloatProperty2(string name)
+    public static bool hasDecimalProperty2(string name)
     {
         string[] nameParts = name.Split(' ');
-        return (nameParts[1].Length >= 9 && nameParts[1].Substring(0, 9) == "xsd:float");
+        if (nameParts.Length < 2)
+        {
+            return false;
+        }
+        return (nameParts[1].Length >= 11 && nameParts[1].Substring(0, 11) == "xsd:decimal");
     }
 }

@@ -51,7 +51,7 @@ textarea {
 }
 
 .foundProperties {
-    width: 100%;
+    width: calc(100% - 1px);
 }
 .foundProperties th, .checkboxes {
     text-align: center;
@@ -83,6 +83,18 @@ textarea {
 
 .row {
     margin-top: 20px;
+}
+
+#fineTune {
+    width: 60px;
+}
+
+#MainContent_Button2, .toggleContents {
+    display: none;
+}
+
+.navbar-inverse .navbar-brand {
+    color: #fff;
 }
 
 /* Responsive: Portrait tablets and up */

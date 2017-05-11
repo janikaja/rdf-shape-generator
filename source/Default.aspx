@@ -14,12 +14,15 @@
         <div class="col-md-12">
             <h2>RDF data:</h2>
             <asp:TextBox ID="source" TextMode="multiline" Columns="50" Rows="10" runat="server"></asp:TextBox>
+            <asp:Button ID="Button2" runat="server" Text="Update data shape" />
         </div>
     </div>
     <% if (foundProperties.Count > 0) { %>
         <div class="row">
             <div class="col-md-12">
                 <h2 id="foundPropertiesHeading">Fine-tune constraints for the properties of subject <%= targetSubject %>:</h2>
+                <input id="fineTune" type="button" value="Show" data-label1="Show" data-label2="Hide" />
+                <div class="toggleContents">
                 <table class="foundProperties">
                   <tr>
                       <th>Property and the proposed constraint *</th>
@@ -33,7 +36,6 @@
                     <tr>
                         <td><%= item.Name %></td>
                         <td>
-                            <% if (!item.hasValueSet()) { %>
                                 <select id="Select<%= item.Index %>" name="cardinality<%= item.Index %>" class="cardinalities" data-index="<%= item.Index %>">
                                     <option value="0" <% if (item.Cardinality_index == 0) { %>selected<% } %>></option>
                                     <option value="1" <% if (item.Cardinality_index == 1) { %>selected<% } %>>Exactly 1 (default)</option>
@@ -50,7 +52,6 @@
                                     Max
                                     <input type="number" name="max<%= item.Index %>" min="1" value="<%= item.Max %>" class="inputCardinalities" data-index="<%= item.Index %>" />
                                 </label>
-                            <% } %>
                         </td>
                         <td class="checkboxes">
                             <label>
@@ -59,17 +60,17 @@
                         </td>
                         <% if (hasNumericValues) { %>
                             <td>
-                                <% if (item.hasIntegerProperty() || item.hasFloatProperty()) { %>
+                                <% if (item.hasIntegerProperty() || item.hasDecimalProperty()) { %>
                                     <select id="ValueRangeMin<%= item.Index %>" name="valueRangeMin<%= item.Index %>">
                                         <option value="MinInclusive" <% if (!item.Range.Is_empty && item.Range.Min_type == "MinInclusive") { %>selected<% } %>>Min inclusive</option>
                                         <option value="MinExclusive" <% if (!item.Range.Is_empty && item.Range.Min_type == "MinExclusive") { %>selected<% } %>>Min exclusive</option>
                                     </select>
-                                    <input type="number" name="minValue<%= item.Index %>" <% if (item.hasFloatProperty()) { %>step="0.01"<% } %> <% if (!item.Range.Is_empty) { %>value="<%= item.Range.getStandardValueMin() %>"<% } %> />
+                                    <input type="number" name="minValue<%= item.Index %>" <% if (item.hasDecimalProperty()) { %>step="0.01"<% } %> <% if (!item.Range.Is_empty) { %>value="<%= item.Range.getStandardValueMin() %>"<% } %> />
                                     <select id="ValueRangeMax<%= item.Index %>" name="valueRangeMax<%= item.Index %>">
                                         <option value="MaxInclusive" <% if (!item.Range.Is_empty && item.Range.Max_type == "MaxInclusive") { %>selected<% } %>>Max inclusive</option>
                                         <option value="MaxExclusive" <% if (!item.Range.Is_empty && item.Range.Max_type == "MaxExclusive") { %>selected<% } %>>Max exclusive</option>
                                     </select>
-                                    <input type="number" name="maxValue<%= item.Index %>" <% if (item.hasFloatProperty()) { %>step="0.01"<% } %> <% if (!item.Range.Is_empty) { %>value="<%= item.Range.getStandardValueMax() %>"<% } %> />
+                                    <input type="number" name="maxValue<%= item.Index %>" <% if (item.hasDecimalProperty()) { %>step="0.01"<% } %> <% if (!item.Range.Is_empty) { %>value="<%= item.Range.getStandardValueMax() %>"<% } %> />
                                 <% } %>
                             </td>
                         <% } %>
@@ -77,12 +78,13 @@
                   <% } %>
                 </table>
                 <p>* according to the available RDF data</p>
+                <asp:Button ID="submit" runat="server" Text="Update data shape" />
+                </div>
             </div>
         </div>
     <% } %>
 
     <% if (shapeReady) { %>
-        <asp:Button ID="submit" runat="server" Text="Update data shape" />
         <div class="row">
             <div class="col-md-12">
                 <h2>ShEx data shape:</h2>

@@ -46,7 +46,7 @@
                         <span class="icon-bar"></span>
                         <span class="icon-bar"></span>
                     </button>
-                    <a class="navbar-brand" runat="server" href="~/"><%: Page.Title %></a>
+                    <span class="navbar-brand"><%: Page.Title %></span>
                 </div>
                 <div class="navbar-collapse collapse">
                     <ul class="nav navbar-nav">

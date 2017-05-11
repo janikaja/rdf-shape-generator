@@ -20,7 +20,7 @@ public partial class _Default : Page
     public List<Property> foundProperties = new List<Property>();
 
     private Dictionary<string, string> prefixDictionary = new Dictionary<string, string>();
-    private Dictionary<string, List<int>> propertyDictionary = new Dictionary<string, List<int>>();
+    private Dictionary<string, List<string>> propertyDictionary = new Dictionary<string, List<string>>();
     private string lastTestedPropertyValue;
     private char[] removeSymbols = { ';', '.', ' ', '\t' }, removeBrackets = { '{', '}' };
 
@@ -49,7 +49,7 @@ public partial class _Default : Page
         string[] propertyParts, stringParts, sourceLines = source.Text.Split(new string[] { "\r\n", "\n" }, StringSplitOptions.None);
         int i, min, max, start = 0, breakLine = 0, startNode = 1, subjectCounter = 0, propertyCounter = 0, cardinalityCounter = 0, samples = 1, cardinalityIndex;
         string property, record = "", currentProperty = "", cardinality = "", tmp = "", valueSet = "", requestedMin, requestedMax;
-        bool firstTime = true, newSample = true, prevWasChecked = false, currIsChecked;
+        bool firstTime = true, newSample = true, prevWasChecked = false, currIsChecked, countListItems;
         Result test;
         Range range;
 
@@ -225,9 +225,9 @@ public partial class _Default : Page
                             tmp = propertyParts[0] + " xsd:integer";
                             hasNumericValues = true;
                         }
-                        else if (hasFloatProperty(propertyParts[1]))
+                        else if (hasDecimalProperty(propertyParts[1]))
                         {
-                            tmp = propertyParts[0] + " xsd:float";
+                            tmp = propertyParts[0] + " xsd:decimal";
                             hasNumericValues = true;
                         }
                         else if (hasIriProperty(property))
@@ -282,7 +282,7 @@ public partial class _Default : Page
                     }
                     if (!prevWasChecked)
                     {
-                        saveProperty(currentProperty, cardinalityCounter);
+                        saveProperty(currentProperty, cardinalityCounter.ToString());
                         currentProperty = tmp;
                         valueSet = property.Substring(tmp.Length + 1);
                         prevWasChecked = true;
@@ -290,11 +290,11 @@ public partial class _Default : Page
                     }
                     else if (currentProperty == tmp)
                     {
-                        valueSet += " " + property.Substring(tmp.Length + 1);
+                        valueSet += "," + property.Substring(tmp.Length + 1);
                     }
                     else
                     {
-                        saveProperty(currentProperty + " [" + valueSet + "]", 1);
+                        saveProperty(currentProperty, valueSet);
                         currentProperty = tmp;
                         valueSet = property.Substring(tmp.Length + 1);
                     }
@@ -307,7 +307,7 @@ public partial class _Default : Page
                 {
                     if (prevWasChecked)
                     {
-                        saveProperty(currentProperty + " [" + valueSet + "]", 1);
+                        saveProperty(currentProperty, valueSet);
                         currentProperty = tmp;
                         valueSet = "";
                         cardinalityCounter = 1;
@@ -328,7 +328,7 @@ public partial class _Default : Page
                     //record += "\t" + currentProperty + cardinality + ";" + Environment.NewLine;
                     if (currentProperty.Length > 0)
                     {
-                        saveProperty(currentProperty, cardinalityCounter);
+                        saveProperty(currentProperty, cardinalityCounter.ToString());
                     }
                     if (tmp.Length == 0)
                     {
@@ -354,7 +354,7 @@ public partial class _Default : Page
                         {
                             currentProperty = tmp;
                         }
-                        saveProperty(currentProperty, 1);
+                        saveProperty(currentProperty, "1");
                     }
                     currentProperty = tmp;
                     cardinalityCounter = 0;
@@ -367,42 +367,92 @@ public partial class _Default : Page
             {
                 requestedMin = "";
                 requestedMax = "";
+                tmp = "";
                 cardinalityIndex = 0;
+                countListItems = false;
                 currIsChecked = isPropertyChecked(key, true);
-                cardinality = (currIsChecked) ? "N/A" : getRequestedCardinality(i);
-                if (cardinality == "error" || cardinality == "N/A")
+                cardinality = (currIsChecked) ? "valueSet" : getRequestedCardinality(i);
+                if (cardinality == "error" || cardinality == "N/A" || cardinality == "valueSet")
                 {
-                    cardinality = "";
-                    if (propertyDictionary[key].Count < samples)
+                    if (cardinality == "valueSet")
                     {
-                        min = 0;
+                        cardinality = " [" + filterUnique(String.Join(",", propertyDictionary[key])) + "]";
+                        countListItems = true;
+                        tmp = getRequestedCardinality(i);
+                        if (tmp.Length > 0 && tmp != "N/A")
+                        {
+                            cardinality += tmp;
+                            stringParts = tmp.Trim(removeBrackets).Split(',');
+                            if (stringParts.Length == 2)
+                            {
+                                requestedMin = stringParts[0];
+                                requestedMax = stringParts[1];
+                                cardinalityIndex = 0;
+                            }
+                            else if (stringParts[0] == "?")
+                            {
+                                requestedMin = "0";
+                                requestedMax = "1";
+                                cardinalityIndex = 2;
+                            }
+                            else if (stringParts[0] == "*")
+                            {
+                                requestedMin = "0";
+                                cardinalityIndex = 3;
+                            }
+                            else if (stringParts[0] == "+")
+                            {
+                                requestedMin = "1";
+                                cardinalityIndex = 4;
+                            }
+                            else
+                            {
+                                requestedMin = requestedMax = stringParts[0];
+                                cardinalityIndex = (requestedMin == "1") ? 1 : 0;
+                            }
+                        }
                     }
                     else
                     {
-                        min = propertyDictionary[key].Min();
+                        cardinality = "";
                     }
-                    max = propertyDictionary[key].Max();
 
-                    if (min == 0 && max == 1)
+                    if (tmp.Length == 0 || tmp == "N/A")
                     {
-                        cardinality = "?";
+                        if (propertyDictionary[key].Count < samples)
+                        {
+                            min = 0;
+                        }
+                        else
+                        {
+                            min = getMinValue(propertyDictionary[key], countListItems);
+                        }
+                        max = getMaxValue(propertyDictionary[key], countListItems);
+
+                        if (min == 0 && max == 1)
+                        {
+                            cardinality += "?";
+                        }
+                        else if (min == 0 && max > 1)
+                        {
+                            cardinality += "*";
+                        }
+                        else if (min == 1 && max > 1)
+                        {
+                            cardinality += "+";
+                        }
+                        else if (min == max && min != 1 && key[key.Length - 1] != ']')
+                        {
+                            cardinality += "{" + min + "}";
+                        }
+                        else if (min < max)
+                        {
+                            cardinality += "{" + min + "," + max + "}";
+                        }
                     }
-                    else if (min == 0 && max > 1)
-                    {
-                        cardinality = "*";
-                    }
-                    else if (min == 1 && max > 1)
-                    {
-                        cardinality = "+";
-                    }
-                    else if (min == max && min != 1 && key[key.Length - 1] != ']')
-                    {
-                        cardinality = "{" + min + "}";
-                    }
-                    else if (min < max)
-                    {
-                        cardinality = "{" + min + "," + max + "}";
-                    }
+
+                        tmp = "";
+
                 }
                 else if (cardinality.Length > 0)
                 {
@@ -436,8 +486,7 @@ public partial class _Default : Page
                     }
                 }
 
-                tmp = "";
-                range = getRange(i, Property.hasFloatProperty2(key));
+                range = getRange(i, Property.hasDecimalProperty2(key));
                 if (!currIsChecked && !range.Is_empty)
                 {
                     if (range.Min_value.Length > 0)
@@ -508,10 +557,10 @@ public partial class _Default : Page
         return (matches.Count > 0);
     }
 
-    private bool hasFloatProperty(string property)
+    private bool hasDecimalProperty(string property)
     {
-        Regex floatRegex = new Regex(@"^\d*\.\d+$");
-        MatchCollection matches = floatRegex.Matches(property);
+        Regex decimalRegex = new Regex(@"^(\+|-)?([0-9]+(\.[0-9]*)?|\.[0-9]+)$");
+        MatchCollection matches = decimalRegex.Matches(property);
         lastTestedPropertyValue = property;
         return (matches.Count > 0);
     }
@@ -557,7 +606,7 @@ public partial class _Default : Page
             string tmp = "";
             foreach (Match match in matches)
             {
-                tmp += match.Value;
+                tmp += match.Value + "~";
             }
             return new Result(true, tmp);
         }
@@ -637,11 +686,11 @@ public partial class _Default : Page
         return 0;
     }
 
-    private void saveProperty(string key, int value)
+    private void saveProperty(string key, string value)
     {
         if (!propertyDictionary.ContainsKey(key))
         {
-            List<int> list = new List<int>();
+            List<string> list = new List<string>();
             list.Add(value);
             propertyDictionary[key] = list;
         }
@@ -843,9 +892,72 @@ public partial class _Default : Page
                 error = "Incorrect value range!";
                 return new Range();
             }
+            minValue = minValueFloat.ToString().Replace(',', '.');
+            maxValue = maxValueFloat.ToString().Replace(',', '.');
         }
         
         return new Range(minType, minValue, maxType, maxValue);
+    }
+
+    private int getMinValue(List<string> list, bool countListItems)
+    {
+        int min;
+        if (countListItems)
+        {
+            min = list.First().Split(',').Length;
+            foreach (string item in list)
+            {
+                if (item.Split(',').Length < min)
+                {
+                    min = item.Split(',').Length;
+                }
+            }
+        }
+        else
+        {
+            min = int.Parse(list.First());
+            foreach (string item in list)
+            {
+                if (int.Parse(item) < min)
+                {
+                    min = int.Parse(item);
+                }
+            }
+        }
+        return min;
+    }
+
+    private int getMaxValue(List<string> list, bool countListItems)
+    {
+        int max;
+        if (countListItems)
+        {
+            max = list.First().Split(',').Length;
+            foreach (string item in list)
+            {
+                if (item.Split(',').Length > max)
+                {
+                    max = item.Split(',').Length;
+                }
+            }
+        }
+        else
+        {
+            max = int.Parse(list.First());
+            foreach (string item in list)
+            {
+                if (int.Parse(item) > max)
+                {
+                    max = int.Parse(item);
+                }
+            }
+        }
+        return max;
+    }
+
+    private string filterUnique(string text)
+    {
+        return String.Join(" ", text.Split(',').Distinct().ToArray());
     }
 
     protected void SampleList_SelectedIndexChanged(object sender, EventArgs e)
