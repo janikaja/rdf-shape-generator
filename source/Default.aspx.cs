@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Web;
@@ -11,11 +10,10 @@ using VDS.RDF;
 using VDS.RDF.Parsing;
 using VDS.RDF.Query;
 using VDS.RDF.Query.Datasets;
-using VDS.RDF.Writing.Formatting;
 
 public partial class _Default : Page
 {
-    public string targetSubject, result = "", error = "";
+    public string targetSubject, result = "", error = "", encodedSchema, encodedData;
     public bool additionalInfoRequired = false, shapeReady = false, hasNumericValues = false;
     public List<Property> foundProperties = new List<Property>();
 
@@ -23,14 +21,20 @@ public partial class _Default : Page
     private Dictionary<string, List<string>> propertyDictionary = new Dictionary<string, List<string>>();
     private string lastTestedPropertyValue;
     private char[] removeSymbols = { ';', '.', ' ', '\t' }, removeBrackets = { '{', '}' };
+    private Regex quoteRegex = new Regex(@"""[^""\\]*""");
 
     protected void Page_Load(object sender, EventArgs e)
     {
+        /*if (Request.Params["__EVENTTARGET"] != null && (Request.Params["__EVENTTARGET"].ToString().Contains("dataToClipboard") || Request.Params["__EVENTTARGET"].ToString().Contains("shapeToClipboard")))
+        {
+            return;
+        }*/
+
         if (SampleList.SelectedIndex < 1)
         {
             SampleList.Items.Clear();
             SampleList.Items.Add(new ListItem("", "0"));
-            for (int j = 1; j < 4; j++)
+            for (int j = 1; j <= 5; j++)
             {
                 SampleList.Items.Add(new ListItem("Sample" + j.ToString(), j.ToString()));
             }
@@ -47,9 +51,9 @@ public partial class _Default : Page
         }
 
         string[] propertyParts, stringParts, sourceLines = source.Text.Split(new string[] { "\r\n", "\n" }, StringSplitOptions.None);
-        int i, min, max, start = 0, breakLine = 0, startNode = 1, subjectCounter = 0, propertyCounter = 0, cardinalityCounter = 0, samples = 1, cardinalityIndex;
+        int i, min, max, start = 0, breakLine = 0, startNode = 1, subjectCounter = 0, propertyCounter = 0, cardinalityCounter = 0, samples = 1, cardinalityIndex, offset = 0;
         string property, record = "", currentProperty = "", cardinality = "", tmp = "", valueSet = "", requestedMin, requestedMax;
-        bool firstTime = true, newSample = true, prevWasChecked = false, currIsChecked, countListItems;
+        bool firstTime = true, newSample = true, prevWasChecked = false, currIsChecked, countListItems, repeatedProperty = false;
         Result test;
         Range range;
 
@@ -63,14 +67,16 @@ public partial class _Default : Page
         catch (RdfParseException parseEx)
         {
             //This indicates a parser error e.g unexpected character, premature end of input, invalid syntax etc.
-            error = "Parser Error: ";
+            error = "Parser error: ";
             error += parseEx.Message;
+            return;
         }
         catch (RdfException rdfEx)
         {
             //This represents a RDF error e.g. illegal triple for the given syntax, undefined namespace
-            error = "RDF Error: ";
+            error = "RDF error: ";
             error += rdfEx.Message;
+            return;
         }
 
         /*result = (g.IsEmpty)? "empty graph" : "not empty graph";
@@ -191,8 +197,8 @@ public partial class _Default : Page
         }
         else
         {
-            targetSubject = HttpUtility.HtmlEncode(sourceLines[i + 1].Trim(removeSymbols));
-            record += Environment.NewLine + "my:Shape {";
+            targetSubject = HttpUtility.UrlEncode(sourceLines[i + 1].Trim(removeSymbols));
+            record += Environment.NewLine + "my:Schema {";
             for (int k = i + 2; k < sourceLines.Length; k++)
             {
                 property = sourceLines[k].Trim(removeSymbols);
@@ -211,49 +217,51 @@ public partial class _Default : Page
                     currIsChecked = isPropertyChecked(propertyParts[0]);
                     if (!currIsChecked)
                     {
-                        test = hasStringProperty(property);
+                        test = hasLanguageTag(property);
                         if (test.Answer == true)
                         {
+                            tmp = propertyParts[0] + " [" + test.Contents.TrimStart('"') + "]";
+                        }
+                        else if ((test = hasStringProperty(property)).Answer == true)
+                        {
                             tmp = propertyParts[0] + " xsd:string";
+                            repeatedProperty = (test.Cardinality - 1 > offset);
                         }
                         else if (hasDateProperty(propertyParts[1]))
                         {
                             tmp = propertyParts[0] + " xsd:date";
+                            repeatedProperty = (property.Split(',').Length - 1 > offset);
                         }
-                        else if (hasIntegerProperty(propertyParts[1]))
+                        else if (hasIntegerProperty(property))
                         {
                             tmp = propertyParts[0] + " xsd:integer";
                             hasNumericValues = true;
+                            repeatedProperty = (property.Split(',').Length - 1 > offset);
                         }
                         else if (hasDecimalProperty(propertyParts[1]))
                         {
                             tmp = propertyParts[0] + " xsd:decimal";
                             hasNumericValues = true;
+                            repeatedProperty = (property.Split(',').Length - 1 > offset);
                         }
                         else if (hasIriProperty(property))
                         {
                             tmp = propertyParts[0] + " IRI";
+                            repeatedProperty = (property.Split(',').Length - 1 > offset);
                         }
                         else
                         {
                             test = hasIRIWithPrefix(propertyParts[1]);
                             if (test.Answer == true)
                             {
-                                tmp = propertyParts[0] + " [" + test.Contents + "]";
-                            }
-                            else
-                            {
-                                test = hasLanguageTag(property);
-                                if (test.Answer == true)
-                                {
-                                    tmp = propertyParts[0] + " [" + test.Contents.TrimStart('"') + "]";
-                                }
+                                tmp = propertyParts[0] + ((propertyParts[0] == "a" || propertyParts[0] == "rdf:type") ? " [" + test.Contents + "]" : " IRI");
+                                repeatedProperty = (property.Split(',').Length - 1 > offset);
                             }
                         }
 
                         if (tmp.Length == 0)
                         {
-                            error = "Unrecognized RDF property value! (" + lastTestedPropertyValue + ")";
+                            error = "Unrecognized property's value! (" + lastTestedPropertyValue + ")";
                             break;
                         }
                     }
@@ -290,7 +298,7 @@ public partial class _Default : Page
                     }
                     else if (currentProperty == tmp)
                     {
-                        valueSet += "," + property.Substring(tmp.Length + 1);
+                        valueSet += " " + property.Substring(tmp.Length + 1);
                     }
                     else
                     {
@@ -303,7 +311,7 @@ public partial class _Default : Page
                         break;
                     }
                 }
-                if (!currIsChecked && (currentProperty != tmp || k == sourceLines.Length - 1))
+                if (!currIsChecked && (currentProperty != tmp || (k == sourceLines.Length - 1 && !repeatedProperty)))
                 {
                     if (prevWasChecked)
                     {
@@ -317,7 +325,7 @@ public partial class _Default : Page
                         firstTime = false;
                         cardinalityCounter--;
                     }
-                    if (currentProperty == tmp && k == sourceLines.Length - 1)
+                    if (currentProperty == tmp && k == sourceLines.Length - 1 && !repeatedProperty)
                     {
                         cardinalityCounter++;
                     }
@@ -326,7 +334,8 @@ public partial class _Default : Page
                         cardinality = "{" + cardinalityCounter + "}";
                     }
                     //record += "\t" + currentProperty + cardinality + ";" + Environment.NewLine;
-                    if (currentProperty.Length > 0)
+                    if (currentProperty.Length > 0 && !prevWasChecked)
+                    //if (currentProperty.Length > 0)
                     {
                         saveProperty(currentProperty, cardinalityCounter.ToString());
                     }
@@ -347,7 +356,7 @@ public partial class _Default : Page
                             break;
                         }
                     }
-                    if (currentProperty != tmp && k == sourceLines.Length - 1)
+                    if (currentProperty != tmp && k == sourceLines.Length - 1 && !repeatedProperty)
                     {
                         //record += "\t" + tmp + Environment.NewLine;
                         if (tmp.Length > 0)
@@ -360,6 +369,15 @@ public partial class _Default : Page
                     cardinalityCounter = 0;
                     cardinality = "";
                     prevWasChecked = false;
+                }
+                if (repeatedProperty)
+                {
+                    offset++;
+                    k--;
+                }
+                else
+                {
+                    offset = 0;
                 }
             }
             i = 0;
@@ -376,7 +394,7 @@ public partial class _Default : Page
                 {
                     if (cardinality == "valueSet")
                     {
-                        cardinality = " [" + filterUnique(String.Join(",", propertyDictionary[key])) + "]";
+                        cardinality = "[" + filterUnique(propertyDictionary[key]) + "]";
                         countListItems = true;
                         tmp = getRequestedCardinality(i);
                         if (tmp.Length > 0 && tmp != "N/A")
@@ -411,13 +429,17 @@ public partial class _Default : Page
                                 cardinalityIndex = (requestedMin == "1") ? 1 : 0;
                             }
                         }
+                        else if (tmp.Length == 0)
+                        {
+                            cardinalityIndex = 1;
+                        }
                     }
                     else
                     {
                         cardinality = "";
                     }
 
-                    if (tmp.Length == 0 || tmp == "N/A")
+                    if (cardinalityIndex == 0 && (tmp.Length == 0 || tmp == "N/A"))
                     {
                         if (propertyDictionary[key].Count < samples)
                         {
@@ -530,7 +552,7 @@ public partial class _Default : Page
 
     private Result hasStringProperty(string property)
     {
-        Regex quoteRegex = new Regex(@"""[^""\\]*(?:\\.[^""\\]*)*""$");
+        //Regex quoteRegex = new Regex(@"""[^""\\]*(?:\\.[^""\\]*)*""$");
         MatchCollection matches = quoteRegex.Matches(property);
         lastTestedPropertyValue = property;
         if (matches.Count > 0)
@@ -538,20 +560,20 @@ public partial class _Default : Page
             string tmp = "";
             foreach (Match match in matches)
             {
-                if (hasDateProperty(match.ToString().Trim('"')))
+                if (property.IndexOf("^^xsd:date") != -1 && hasDateProperty(match.ToString() + "^^xsd:date"))
                 {
                     return new Result(false, "N/A");
                 }
                 tmp += match.Value;
             }
-            return new Result(true, tmp);
+            return new Result(true, tmp, matches.Count);
         }
         return new Result(false, "N/A");
     }
 
     private bool hasIntegerProperty(string property)
     {
-        Regex integerRegex = new Regex(@"^\d+$");
+        Regex integerRegex = new Regex(@"\s\d+$");
         MatchCollection matches = integerRegex.Matches(property);
         lastTestedPropertyValue = property;
         return (matches.Count > 0);
@@ -559,7 +581,7 @@ public partial class _Default : Page
 
     private bool hasDecimalProperty(string property)
     {
-        Regex decimalRegex = new Regex(@"^(\+|-)?([0-9]+(\.[0-9]*)?|\.[0-9]+)$");
+        Regex decimalRegex = new Regex(@"^(\+|-)?([0-9]+(\.[0-9]*)?|\.[0-9]+),?(\s(\+|-)?([0-9]+(\.[0-9]*)?|\.[0-9]+))*$");
         MatchCollection matches = decimalRegex.Matches(property);
         lastTestedPropertyValue = property;
         return (matches.Count > 0);
@@ -575,7 +597,7 @@ public partial class _Default : Page
 
     private bool hasDateProperty(string property)
     {
-        Regex dateRegex = new Regex(@"(([1-9][0-9]|[1-9])\d{2})-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])");
+        Regex dateRegex = new Regex(@"""(([1-9][0-9]|[1-9])\d{2})-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])""\^\^xsd:date,?(""(([1-9][0-9]|[1-9])\d{2})-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])""\^\^xsd:date)*");
         MatchCollection matches = dateRegex.Matches(property);
         lastTestedPropertyValue = property;
         return (matches.Count > 0);
@@ -583,7 +605,7 @@ public partial class _Default : Page
 
     private Result hasIRIWithPrefix(string property)
     {
-        Regex prefixRegex = new Regex(@"^[a-z]+:[a-zA-Z]+$");
+        Regex prefixRegex = new Regex(@"^[a-z]+:[a-zA-Z]+,?(\s[a-z]+:[a-zA-Z]+)*$");
         MatchCollection matches = prefixRegex.Matches(property);
         if (matches.Count > 0)
         {
@@ -658,6 +680,8 @@ public partial class _Default : Page
                 }
             }
             resultText.Text = prefixes + shape;
+            encodedSchema = HttpUtility.UrlEncode(resultText.Text).Replace("+", "%20");
+            encodedData = HttpUtility.UrlEncode(source.Text.Trim()).Replace("+", "%20");
             shapeReady = true;
         }
     }
@@ -901,15 +925,26 @@ public partial class _Default : Page
 
     private int getMinValue(List<string> list, bool countListItems)
     {
-        int min;
+        int min, quotes;
+        char separator;
         if (countListItems)
         {
-            min = list.First().Split(',').Length;
+            quotes = countQuotes(list.First());
+            separator = (quotes == 0 && list.First().Split(',').Length == 1) ? ' ' : ',';
+            min = (quotes > 0)? quotes : list.First().Split(separator).Length;
             foreach (string item in list)
             {
-                if (item.Split(',').Length < min)
+                separator = (quotes == 0 && item.Split(',').Length == 1) ? ' ' : ',';
+                if ((quotes = countQuotes(item)) > 0)
                 {
-                    min = item.Split(',').Length;
+                    if (quotes < min)
+                    {
+                        min = quotes;
+                    }
+                }
+                else if (item.Split(separator).Length < min)
+                {
+                    min = item.Split(separator).Length;
                 }
             }
         }
@@ -929,15 +964,26 @@ public partial class _Default : Page
 
     private int getMaxValue(List<string> list, bool countListItems)
     {
-        int max;
+        int max, quotes;
+        char separator;
         if (countListItems)
         {
-            max = list.First().Split(',').Length;
+            quotes = countQuotes(list.First());
+            separator = (quotes == 0 && list.First().Split(',').Length == 1) ? ' ' : ',';
+            max = (quotes > 0) ? quotes : list.First().Split(separator).Length;
             foreach (string item in list)
             {
-                if (item.Split(',').Length > max)
+                separator = (quotes == 0 && item.Split(',').Length == 1) ? ' ' : ',';
+                if ((quotes = countQuotes(item)) > 0)
                 {
-                    max = item.Split(',').Length;
+                    if (quotes > max)
+                    {
+                        max = quotes;
+                    }
+                }
+                else if (item.Split(separator).Length > max)
+                {
+                    max = item.Split(separator).Length;
                 }
             }
         }
@@ -955,9 +1001,50 @@ public partial class _Default : Page
         return max;
     }
 
-    private string filterUnique(string text)
+    private string filterUnique(List<string> list)
     {
-        return String.Join(" ", text.Split(',').Distinct().ToArray());
+        MatchCollection matches;
+        List<string> newList = new List<string>();
+        char separator;
+
+        foreach (string item in list)
+        {
+            matches = quoteRegex.Matches(item);
+            if (matches.Count > 0 && item.IndexOf("^^xsd:date") == -1)
+            {
+                foreach (Match match in matches)
+                {
+                    newList.Add(match.ToString());
+                }
+            }
+            else if (hasIntegerProperty(item) || hasIriProperty(item) || hasDecimalProperty(item) || hasIRIWithPrefix(item).Answer || item.IndexOf("^^xsd:date") != -1)
+            {
+                separator = (item.Split(',').Length == 1) ? ' ' : ',';
+                foreach (string number in item.Split(separator))
+                {
+                    newList.Add(number.Trim());
+                }
+            }
+            else
+            {
+                newList.Add(item);
+            }
+        }
+
+        return String.Join(" ", newList.Distinct().ToArray());
+    }
+
+    private int countQuotes(string text)
+    {
+        MatchCollection matches = quoteRegex.Matches(text);
+        return matches.Count;
+    }
+
+    private int countIntegers(string text)
+    {
+        Regex integerRegex = new Regex(@"\s\d+$");
+        MatchCollection matches = integerRegex.Matches(text);
+        return matches.Count;
     }
 
     protected void SampleList_SelectedIndexChanged(object sender, EventArgs e)
@@ -965,6 +1052,26 @@ public partial class _Default : Page
         resultText.Text = "";
         source.Text = Sample.getSample(SampleList.SelectedIndex);
         foundProperties.Clear();
+        nodeOptions.Items.Clear();
+        infoRequired.Value = "0";
+        additionalInfoRequired = false;
         shapeReady = false;
+        error = "";
     }
+
+    /*protected void dataToClipboard_Click(object sender, EventArgs e)
+    {
+        Thread thread = new Thread(() => Clipboard.SetText(source.Text));
+        thread.SetApartmentState(ApartmentState.STA); //Set the thread to STA
+        thread.Start();
+        thread.Join(); //Wait for the thread to end
+    }
+
+    protected void shapeToClipboard_Click(object sender, EventArgs e)
+    {
+        Thread thread = new Thread(() => Clipboard.SetText(resultText.Text));
+        thread.SetApartmentState(ApartmentState.STA); //Set the thread to STA
+        thread.Start();
+        thread.Join(); //Wait for the thread to end
+    }*/
 }

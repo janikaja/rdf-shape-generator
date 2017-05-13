@@ -126,28 +126,24 @@ public class Property
     public bool hasIntegerProperty()
     {
         string[] nameParts = name.Split(' ');
-        return (nameParts[1].Length >= 11 && nameParts[1].Substring(0, 11) == "xsd:integer");
+        return (nameParts.Length > 1 && nameParts[1].Length >= 11 && nameParts[1].Substring(0, 11) == "xsd:integer");
     }
 
     public static bool hasIntegerProperty2(string name)
     {
         string[] nameParts = name.Split(' ');
-        return (nameParts[1].Length >= 11 && nameParts[1].Substring(0, 11) == "xsd:integer");
+        return (nameParts.Length > 1 && nameParts[1].Length >= 11 && nameParts[1].Substring(0, 11) == "xsd:integer");
     }
 
     public bool hasDecimalProperty()
     {
         string[] nameParts = name.Split(' ');
-        return (nameParts[1].Length >= 11 && nameParts[1].Substring(0, 11) == "xsd:decimal");
+        return (nameParts.Length > 1 && nameParts[1].Length >= 11 && nameParts[1].Substring(0, 11) == "xsd:decimal");
     }
 
     public static bool hasDecimalProperty2(string name)
     {
         string[] nameParts = name.Split(' ');
-        if (nameParts.Length < 2)
-        {
-            return false;
-        }
-        return (nameParts[1].Length >= 11 && nameParts[1].Substring(0, 11) == "xsd:decimal");
+        return (nameParts.Length > 1 && nameParts[1].Length >= 11 && nameParts[1].Substring(0, 11) == "xsd:decimal");
     }
 }
