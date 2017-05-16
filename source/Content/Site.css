@@ -125,11 +125,18 @@ textarea {
     margin-top: 30px;
 }
 
+.navbar-inverse {
+    background-color: orange;
+    border: none;
+}
+.navbar-inverse .navbar-nav .menuItem {
+    color: grey;
+}
+
 .footer {
     position: absolute;
     bottom: 0;
-    width: 100%;
-    max-width: 1170px;
+    width: calc(100% - 30px);
 }
 
 /* Responsive: Portrait tablets and up */
@@ -145,5 +152,20 @@ textarea {
     }
     .body-content {
         padding: 0;
+    }
+    .footer {
+        max-width: 750px;
+    }
+}
+
+@media screen and (min-width: 992px) {
+    .footer {
+        max-width: 970px;
+    }
+}
+
+@media screen and (min-width: 1200px) {
+    .footer {
+        max-width: 1170px;
     }
 }
