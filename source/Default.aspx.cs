@@ -560,7 +560,13 @@ public partial class _Default : Page
             string tmp = "";
             foreach (Match match in matches)
             {
-                if (property.IndexOf("^^xsd:date") != -1 && hasDateProperty(match.ToString() + "^^xsd:date"))
+                if (
+                    (property.IndexOf("^^xsd:date") != -1 && hasDateProperty(match.ToString() + "^^xsd:date"))
+                    ||
+                    property.IndexOf("^^xsd:integer") == property.Length - 13
+                    ||
+                    property.IndexOf("^^xsd:decimal") == property.Length - 13
+                )
                 {
                     return new Result(false, "N/A");
                 }
@@ -573,10 +579,10 @@ public partial class _Default : Page
 
     private bool hasIntegerProperty(string property)
     {
-        Regex integerRegex = new Regex(@"\s\d+$");
+        Regex integerRegex = new Regex(@"\s(\+|-)?\d+$");
         MatchCollection matches = integerRegex.Matches(property);
         lastTestedPropertyValue = property;
-        return (matches.Count > 0);
+        return (matches.Count > 0 || property.IndexOf("^^xsd:integer") == property.Length - 13);
     }
 
     private bool hasDecimalProperty(string property)
@@ -584,7 +590,7 @@ public partial class _Default : Page
         Regex decimalRegex = new Regex(@"^(\+|-)?([0-9]+(\.[0-9]*)?|\.[0-9]+),?(\s(\+|-)?([0-9]+(\.[0-9]*)?|\.[0-9]+))*$");
         MatchCollection matches = decimalRegex.Matches(property);
         lastTestedPropertyValue = property;
-        return (matches.Count > 0);
+        return (matches.Count > 0 || property.IndexOf("^^xsd:decimal") == property.Length - 13);
     }
 
     private bool hasIriProperty(string property)
@@ -879,6 +885,8 @@ public partial class _Default : Page
         int number, minValueInt = 0, maxValueInt = 0;
         float minValueFloat = 0, maxValueFloat = 0;
         string minValue = "", maxValue = "", minType = Request.Form["valueRangeMin" + index], maxType = Request.Form["valueRangeMax" + index];
+        bool noMinValue = (Request.Form["minValue" + index].Length == 0);
+        bool noMaxValue = (Request.Form["maxValue" + index].Length == 0);
 
         if (!floatValue)
         {
@@ -890,13 +898,19 @@ public partial class _Default : Page
             {
                 maxValueInt = number;
             }
-            if (minValueInt > maxValueInt)
+            if (!noMinValue && !noMaxValue && minValueInt > maxValueInt)
             {
                 error = "Incorrect value range!";
                 return new Range();
             }
-            minValue = minValueInt.ToString();
-            maxValue = maxValueInt.ToString();
+            if (!noMinValue)
+            {
+                minValue = minValueInt.ToString();
+            }
+            if (!noMaxValue)
+            {
+                maxValue = maxValueInt.ToString();
+            }
         }
         else
         {
@@ -911,13 +925,19 @@ public partial class _Default : Page
                 return new Range();
             }
 
-            if (minValueFloat > maxValueFloat)
+            if (!noMinValue && !noMaxValue && minValueFloat > maxValueFloat)
             {
                 error = "Incorrect value range!";
                 return new Range();
             }
-            minValue = minValueFloat.ToString().Replace(',', '.');
-            maxValue = maxValueFloat.ToString().Replace(',', '.');
+            if (!noMinValue)
+            {
+                minValue = minValueFloat.ToString().Replace(',', '.');
+            }
+            if (!noMaxValue)
+            {
+                maxValue = maxValueFloat.ToString().Replace(',', '.');
+            }
         }
         
         return new Range(minType, minValue, maxType, maxValue);
@@ -1010,14 +1030,14 @@ public partial class _Default : Page
         foreach (string item in list)
         {
             matches = quoteRegex.Matches(item);
-            if (matches.Count > 0 && item.IndexOf("^^xsd:date") == -1)
+            if (matches.Count > 0 && item.IndexOf("^^xsd:date") == -1 && item.IndexOf("^^xsd:integer") == -1 && item.IndexOf("^^xsd:decimal") == -1)
             {
                 foreach (Match match in matches)
                 {
                     newList.Add(match.ToString());
                 }
             }
-            else if (hasIntegerProperty(item) || hasIriProperty(item) || hasDecimalProperty(item) || hasIRIWithPrefix(item).Answer || item.IndexOf("^^xsd:date") != -1)
+            else if (hasIntegerProperty(item) || hasIriProperty(item) || hasDecimalProperty(item) || hasIRIWithPrefix(item).Answer || item.IndexOf("^^xsd:date") != -1 || item.IndexOf("^^xsd:integer") != -1 || item.IndexOf("^^xsd:decimal") != -1)
             {
                 separator = (item.Split(',').Length == 1) ? ' ' : ',';
                 foreach (string number in item.Split(separator))

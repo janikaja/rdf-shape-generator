@@ -19,7 +19,7 @@
             <asp:Button ID="Button2" runat="server" Text="Update schema" />
         </div>
     </div>
-    <% if (foundProperties.Count > 0) { %>
+    <% if (error.Length == 0 && foundProperties.Count > 0) { %>
         <div class="row">
             <div class="col-md-12">
                 <h2 id="foundPropertiesHeading">Fine-tuning of constraints</h2>
@@ -90,7 +90,7 @@
         <div class="row">
             <div class="col-md-12">
                 <h2>ShExC schema:</h2>
-                <asp:TextBox ID="resultText" TextMode="multiline" Columns="50" Rows="10" runat="server"></asp:TextBox>
+                <asp:TextBox ID="resultText" TextMode="multiline" Columns="50" Rows="10" ReadOnly="true" runat="server"></asp:TextBox>
             </div>
         </div>
         <a href="http://rawgit.com/shexSpec/shex.js/master/doc/shex-simple.html?interface=simple&schema=<%= encodedSchema %>&data=<%= encodedData %>&shape-map=<%= targetSubject %>%40my%3ASchema" target="_blank">Test RDF data and ShExC schema in a validator (https://github.com/shexSpec/shex.js)</a>

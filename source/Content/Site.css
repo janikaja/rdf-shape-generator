@@ -31,6 +31,9 @@ textarea {
     padding: 10px;
     resize: vertical;
 }
+textarea[readonly] {
+    cursor: text;
+}
 
 .checkboxes label {
     display: block;
