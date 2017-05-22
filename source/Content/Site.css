@@ -35,6 +35,12 @@ textarea[readonly] {
     cursor: text;
 }
 
+pre {
+    display: inline-block;
+    padding: 0 3px;
+    margin: 0;
+}
+
 .checkboxes label {
     display: block;
     margin-bottom: 0;

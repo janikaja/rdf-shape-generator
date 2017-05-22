@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Web;
@@ -58,11 +59,11 @@ public partial class _Default : Page
         Range range;
 
         Graph g = new Graph();
-        //TurtleParser parser = new TurtleParser();
+        TurtleParser parser = new TurtleParser();
         try
         {
-            //parser.Load(g, new StringReader(source.Text));
-            StringParser.Parse(g, source.Text);
+            parser.Load(g, new StringReader(source.Text));
+            //StringParser.Parse(g, source.Text);
         }
         catch (RdfParseException parseEx)
         {
@@ -311,7 +312,7 @@ public partial class _Default : Page
                         break;
                     }
                 }
-                if (!currIsChecked && (currentProperty != tmp || (k == sourceLines.Length - 1 && !repeatedProperty)))
+                if ((!currIsChecked && currentProperty != tmp) || (k == sourceLines.Length - 1 && !repeatedProperty))
                 {
                     if (prevWasChecked)
                     {
@@ -325,7 +326,7 @@ public partial class _Default : Page
                         firstTime = false;
                         cardinalityCounter--;
                     }
-                    if (currentProperty == tmp && k == sourceLines.Length - 1 && !repeatedProperty)
+                    if (currentProperty == tmp && k == sourceLines.Length - 1 && !repeatedProperty && !firstTime)
                     {
                         cardinalityCounter++;
                     }
@@ -582,7 +583,7 @@ public partial class _Default : Page
         Regex integerRegex = new Regex(@"\s(\+|-)?\d+$");
         MatchCollection matches = integerRegex.Matches(property);
         lastTestedPropertyValue = property;
-        return (matches.Count > 0 || property.IndexOf("^^xsd:integer") == property.Length - 13);
+        return (matches.Count > 0 || (property.Length > 13 && property.IndexOf("^^xsd:integer") == property.Length - 13));
     }
 
     private bool hasDecimalProperty(string property)
@@ -590,7 +591,7 @@ public partial class _Default : Page
         Regex decimalRegex = new Regex(@"^(\+|-)?([0-9]+(\.[0-9]*)?|\.[0-9]+),?(\s(\+|-)?([0-9]+(\.[0-9]*)?|\.[0-9]+))*$");
         MatchCollection matches = decimalRegex.Matches(property);
         lastTestedPropertyValue = property;
-        return (matches.Count > 0 || property.IndexOf("^^xsd:decimal") == property.Length - 13);
+        return (matches.Count > 0 || (property.Length > 13 && property.IndexOf("^^xsd:decimal") == property.Length - 13));
     }
 
     private bool hasIriProperty(string property)
@@ -611,7 +612,7 @@ public partial class _Default : Page
 
     private Result hasIRIWithPrefix(string property)
     {
-        Regex prefixRegex = new Regex(@"^[a-z]+:[a-zA-Z]+,?(\s[a-z]+:[a-zA-Z]+)*$");
+        Regex prefixRegex = new Regex(@"^[a-z]+:[a-zA-Z]+\d*,?(\s[a-z]+:[a-zA-Z]+\d*)*$");
         MatchCollection matches = prefixRegex.Matches(property);
         if (matches.Count > 0)
         {
