@@ -146,4 +146,10 @@ public class Property
         string[] nameParts = name.Split(' ');
         return (nameParts.Length > 1 && nameParts[1].Length >= 11 && nameParts[1].Substring(0, 11) == "xsd:decimal");
     }
+
+    public bool hasBlankNode()
+    {
+        string[] nameParts = name.Split(' ');
+        return (nameParts.Length > 1 && nameParts[1].IndexOf("BNode") != -1);
+    }
 }

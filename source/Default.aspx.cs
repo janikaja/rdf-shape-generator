@@ -15,7 +15,7 @@ using VDS.RDF.Query.Datasets;
 public partial class _Default : Page
 {
     public string targetSubject, result = "", error = "", encodedSchema, encodedData;
-    public bool additionalInfoRequired = false, shapeReady = false, hasNumericValues = false;
+    public bool additionalInfoRequired = false, shapeReady = false, hasNumericValues = false, hideValidatorLink = false;
     public List<Property> foundProperties = new List<Property>();
 
     private Dictionary<string, string> prefixDictionary = new Dictionary<string, string>();
@@ -23,14 +23,12 @@ public partial class _Default : Page
     private string lastTestedPropertyValue;
     private char[] removeSymbols = { ';', '.', ' ', '\t' }, removeBrackets = { '{', '}' };
     private Regex quoteRegex = new Regex(@"""[^""\\]*""");
+    private Graph g = new Graph();
+    private SparqlQueryParser sparqlparser = new SparqlQueryParser();
+    private ISparqlQueryProcessor processor;
 
     protected void Page_Load(object sender, EventArgs e)
     {
-        /*if (Request.Params["__EVENTTARGET"] != null && (Request.Params["__EVENTTARGET"].ToString().Contains("dataToClipboard") || Request.Params["__EVENTTARGET"].ToString().Contains("shapeToClipboard")))
-        {
-            return;
-        }*/
-
         if (SampleList.SelectedIndex < 1)
         {
             SampleList.Items.Clear();
@@ -51,46 +49,52 @@ public partial class _Default : Page
             return;
         }
 
-        string[] propertyParts, stringParts, sourceLines = source.Text.Split(new string[] { "\r\n", "\n" }, StringSplitOptions.None);
-        int i, min, max, start = 0, breakLine = 0, startNode = 1, subjectCounter = 0, propertyCounter = 0, cardinalityCounter = 0, samples = 1, cardinalityIndex, offset = 0;
-        string property, record = "", currentProperty = "", cardinality = "", tmp = "", valueSet = "", requestedMin, requestedMax;
+        string[] stringParts, sourceLines = source.Text.Split(new string[] { "\r\n", "\n" }, StringSplitOptions.None);
+        int i, min, max, start = 0, breakLine = 0, startNode = 1, subjectCounter = 0, propertyCounter = 0, cardinalityCounter = 0, samples = 1, cardinalityIndex, offset = 1;
+        string prevNode = "", record = "", currentProperty = "", currentSubject = "", cardinality = "", tmp = "", valueSet = "", requestedMin, requestedMax, propertyForRecord, propertyValue, startNodeUri = "";
         bool firstTime = true, newSample = true, prevWasChecked = false, currIsChecked, countListItems, repeatedProperty = false;
         Result test;
         Range range;
+        SparqlQuery query;
+        Object results;
 
-        Graph g = new Graph();
-        TurtleParser parser = new TurtleParser();
+        //TurtleParser parser = new TurtleParser();
+        //RdfXmlParser parser = new RdfXmlParser();
         try
         {
-            parser.Load(g, new StringReader(source.Text));
-            //StringParser.Parse(g, source.Text);
+            //parser.Load(g, new StringReader(source.Text));
+            StringParser.Parse(g, source.Text);
         }
         catch (RdfParseException parseEx)
         {
-            //This indicates a parser error e.g unexpected character, premature end of input, invalid syntax etc.
-            error = "Parser error: ";
-            error += parseEx.Message;
-            return;
+            RdfXmlParser parser2 = new RdfXmlParser();
+            try
+            {
+                parser2.Load(g, new StringReader(source.Text));
+                hideValidatorLink = true;
+            }
+            catch
+            {
+                RdfJsonParser parser3 = new RdfJsonParser();
+                try
+                {
+                    parser3.Load(g, new StringReader(source.Text));
+                    hideValidatorLink = true;
+                }
+                catch
+                {
+                    //This indicates a parser error e.g unexpected character, premature end of input, invalid syntax etc.
+                    error = "Parsing error - please, check your input: " + parseEx.Message;
+                    return;
+                }
+            }
         }
         catch (RdfException rdfEx)
         {
             //This represents a RDF error e.g. illegal triple for the given syntax, undefined namespace
-            error = "RDF error: ";
-            error += rdfEx.Message;
+            error = "RDF error - please, check your input: " + rdfEx.Message;
             return;
         }
-
-        /*result = (g.IsEmpty)? "empty graph" : "not empty graph";
-        foreach (ILiteralNode u in g.Nodes.LiteralNodes())
-        {
-            tmp = u.ToString() + Environment.NewLine;
-        }
-        foreach (Triple t in g.Triples)
-        {
-            tmp += t.ToString() + Environment.NewLine;
-        }
-        result = tmp;
-        return;*/
 
         TripleStore store = new TripleStore();
         store.Add(g);
@@ -102,30 +106,15 @@ public partial class _Default : Page
         InMemoryDataset ds = new InMemoryDataset(store, true);
 
         //Get the Query processor
-        ISparqlQueryProcessor processor = new LeviathanQueryProcessor(ds);
-
-        //Use the SparqlQueryParser to give us a SparqlQuery object
-        //Should get a Graph back from a CONSTRUCT query
-        SparqlQueryParser sparqlparser = new SparqlQueryParser();
+        processor = new LeviathanQueryProcessor(ds);
 
         /*SparqlQuery query = sparqlparser.ParseFromString("CONSTRUCT { ?s ?p ?o } WHERE {?s ?p ?o}");
         SparqlQuery query = sparqlparser.ParseFromString("SELECT * WHERE {?s ?p ?o}");
         string q = "PREFIX dct: <http://purl.org/dc/terms/> SELECT ?s (COUNT(?o) AS ?count) WHERE { ?s dct:isPartOf ?o . } GROUP BY ?s";*/
 
-        string q = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> SELECT ?o (COUNT(?o) AS ?count) WHERE { ?s rdf:type ?o . } GROUP BY ?o";
-        SparqlQuery query = sparqlparser.ParseFromString(q);
-        Object results = processor.ProcessQuery(query);
-
-        /*if (results is IGraph)
-        {
-            IGraph gg = (IGraph)results;
-            TurtleFormatter formatter = new TurtleFormatter();
-            foreach (Triple t in gg.Triples)
-            {
-                tmp += t.ToString(formatter) + Environment.NewLine;
-            }
-            tmp += "Query took " + query.QueryExecutionTime + " milliseconds";
-        }*/
+        string q = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> SELECT ?o (COUNT(?o) AS ?count) ?s WHERE { ?s rdf:type ?o FILTER(!isBlank(?s)) . } GROUP BY ?o ?s";
+        query = sparqlparser.ParseFromString(q);
+        results = processor.ProcessQuery(query);
 
         if (infoRequired.Value == "1" && nodeOptions.SelectedValue.Length == 0)
         {
@@ -135,7 +124,7 @@ public partial class _Default : Page
         {
             //Print out the Results
             SparqlResultSet rset = (SparqlResultSet)results;
-            if (rset.Count > 1)
+            if (rset.Count > 1 && rset[0].ToString().Split(',')[0] != rset[1].ToString().Split(',')[0])
             {
                 additionalInfoRequired = true;
                 if (nodeOptions.SelectedValue.Length == 0)
@@ -146,7 +135,26 @@ public partial class _Default : Page
                     {
                         i++;
                         stringParts = result.ToString().Split(',');
-                        nodeOptions.Items.Add(new ListItem(stringParts[0].Substring(5), i.ToString()));
+                        if (prevNode != stringParts[0].Substring(5))
+                        {
+                            nodeOptions.Items.Add(new ListItem(stringParts[0].Substring(5), i.ToString()));
+                            prevNode = stringParts[0].Substring(5);
+                        }
+                    }
+                }
+                else
+                {
+                    startNode = int.Parse(nodeOptions.SelectedValue);
+                    i = 0;
+                    foreach (SparqlResult result in rset)
+                    {
+                        i++;
+                        if (startNode == i)
+                        {
+                            stringParts = result.ToString().Split(',');
+                            startNodeUri = stringParts[1].Substring(5).Trim();
+                            break;
+                        }
                     }
                 }
                 if (infoRequired.Value == "0" || (infoRequired.Value == "1" && nodeOptions.SelectedValue.Length == 0))
@@ -163,13 +171,8 @@ public partial class _Default : Page
         }
         if (sourceLines.Length == 0 || start == sourceLines.Length - 1)
         {
-            error = "Incorrect RDF data format!";
-            return;
-        }
-
-        if (nodeOptions.SelectedValue.Length > 0)
-        {
-            startNode = int.Parse(nodeOptions.SelectedValue);
+            //error = "Incorrect RDF data format!";
+            //return;
         }
 
         for (i = start; i < sourceLines.Length; i++)
@@ -190,345 +193,366 @@ public partial class _Default : Page
 
         if (!checkPrefixes(start, breakLine, sourceLines))
         {
-            error = "Incorrect RDF data format!";
+            //error = "Incorrect RDF data format!";
+            //return;
         }
-        else if (sourceLines.Length < i + 3)
+
+        record += Environment.NewLine + "my:Schema {";
+        int k = -1, blankNodes = 0;
+        foreach (Triple t in g.Triples)
         {
-            error = "Incomplete RDF data!";
-        }
-        else
-        {
-            targetSubject = HttpUtility.UrlEncode(sourceLines[i + 1].Trim(removeSymbols));
-            record += Environment.NewLine + "my:Schema {";
-            for (int k = i + 2; k < sourceLines.Length; k++)
+            if (t.Subject.NodeType == NodeType.Blank)
             {
-                property = sourceLines[k].Trim(removeSymbols);
-                propertyParts = splitAndClear(sourceLines[k]);
-                if (propertyParts.Length == 1)
+                blankNodes++;
+            }
+        }
+        g.NamespaceMap.AddNamespace("foaf", new Uri("http://xmlns.com/foaf/0.1/"));
+        foreach (Triple t in g.Triples)
+        {
+            k++;
+            if ((startNodeUri.Length != 0 && startNodeUri != t.Subject.ToString()) || t.Subject.NodeType == NodeType.Blank)
+            {
+                if (currentProperty.Length > 0)
                 {
-                    continue;
+                    saveProperty(currentProperty, "1");
+                    currentProperty = "";
                 }
-                cardinalityCounter++;
-                propertyCounter++;
-                tmp = "";
-                currIsChecked = false;
-
-                if (property.Length > 0)
+                continue;
+            }
+            if (currentSubject.Length == 0)
+            {
+                currentSubject = t.Subject.ToString();
+            }
+            else if (currentSubject != t.Subject.ToString())
+            {
+                if (prevWasChecked)
                 {
-                    currIsChecked = isPropertyChecked(propertyParts[0]);
-                    if (!currIsChecked)
-                    {
-                        test = hasLanguageTag(property);
-                        if (test.Answer == true)
-                        {
-                            tmp = propertyParts[0] + " [" + test.Contents.TrimStart('"') + "]";
-                        }
-                        else if ((test = hasStringProperty(property)).Answer == true)
-                        {
-                            tmp = propertyParts[0] + " xsd:string";
-                            repeatedProperty = (test.Cardinality - 1 > offset);
-                        }
-                        else if (hasDateProperty(propertyParts[1]))
-                        {
-                            tmp = propertyParts[0] + " xsd:date";
-                            repeatedProperty = (property.Split(',').Length - 1 > offset);
-                        }
-                        else if (hasIntegerProperty(property))
-                        {
-                            tmp = propertyParts[0] + " xsd:integer";
-                            hasNumericValues = true;
-                            repeatedProperty = (property.Split(',').Length - 1 > offset);
-                        }
-                        else if (hasDecimalProperty(propertyParts[1]))
-                        {
-                            tmp = propertyParts[0] + " xsd:decimal";
-                            hasNumericValues = true;
-                            repeatedProperty = (property.Split(',').Length - 1 > offset);
-                        }
-                        else if (hasIriProperty(property))
-                        {
-                            tmp = propertyParts[0] + " IRI";
-                            repeatedProperty = (property.Split(',').Length - 1 > offset);
-                        }
-                        else
-                        {
-                            test = hasIRIWithPrefix(propertyParts[1]);
-                            if (test.Answer == true)
-                            {
-                                tmp = propertyParts[0] + ((propertyParts[0] == "a" || propertyParts[0] == "rdf:type") ? " [" + test.Contents + "]" : " IRI");
-                                repeatedProperty = (property.Split(',').Length - 1 > offset);
-                            }
-                        }
-
-                        if (tmp.Length == 0)
-                        {
-                            error = "Unrecognized property's value! (" + lastTestedPropertyValue + ")";
-                            break;
-                        }
-                    }
-                    else
-                    {
-                        tmp = propertyParts[0];
-                    }
-                }
-
-                if (k == i + 2 || newSample)
-                {
+                    saveProperty(currentProperty, valueSet);
                     currentProperty = tmp;
-                    newSample = false;
-                    if (currIsChecked)
-                    {
-                        valueSet = property.Substring(tmp.Length + 1);
-                        prevWasChecked = true;
-                    }
-                }
-                else if (currIsChecked)
-                {
-                    if (firstTime && cardinalityCounter > 1)
-                    {
-                        firstTime = false;
-                        cardinalityCounter--;
-                    }
-                    if (!prevWasChecked)
-                    {
-                        saveProperty(currentProperty, cardinalityCounter.ToString());
-                        currentProperty = tmp;
-                        valueSet = property.Substring(tmp.Length + 1);
-                        prevWasChecked = true;
-                        cardinalityCounter = 0;
-                    }
-                    else if (currentProperty == tmp)
-                    {
-                        valueSet += " " + property.Substring(tmp.Length + 1);
-                    }
-                    else
-                    {
-                        saveProperty(currentProperty, valueSet);
-                        currentProperty = tmp;
-                        valueSet = property.Substring(tmp.Length + 1);
-                    }
-                    if (tmp.Length == 0)
-                    {
-                        break;
-                    }
-                }
-                if ((!currIsChecked && currentProperty != tmp) || (k == sourceLines.Length - 1 && !repeatedProperty))
-                {
-                    if (prevWasChecked)
-                    {
-                        saveProperty(currentProperty, valueSet);
-                        currentProperty = tmp;
-                        valueSet = "";
-                        cardinalityCounter = 1;
-                    }
-                    if (firstTime && cardinalityCounter > 1)
-                    {
-                        firstTime = false;
-                        cardinalityCounter--;
-                    }
-                    if (currentProperty == tmp && k == sourceLines.Length - 1 && !repeatedProperty && !firstTime)
-                    {
-                        cardinalityCounter++;
-                    }
-                    if (cardinalityCounter > 1)
-                    {
-                        cardinality = "{" + cardinalityCounter + "}";
-                    }
-                    //record += "\t" + currentProperty + cardinality + ";" + Environment.NewLine;
-                    if (currentProperty.Length > 0 && !prevWasChecked)
-                    //if (currentProperty.Length > 0)
-                    {
-                        saveProperty(currentProperty, cardinalityCounter.ToString());
-                    }
-                    if (tmp.Length == 0)
-                    {
-                        if (nodeOptions.SelectedValue.Length == 0 && k + 1 <= sourceLines.Length - 1 && sourceLines[k + 1].Trim(removeSymbols).Length > 0)
-                        {
-                            samples++;
-                            currentProperty = "";
-                            cardinalityCounter = 0;
-                            cardinality = "";
-                            firstTime = true;
-                            newSample = true;
-                            continue;
-                        }
-                        else
-                        {
-                            break;
-                        }
-                    }
-                    if (currentProperty != tmp && k == sourceLines.Length - 1 && !repeatedProperty)
-                    {
-                        //record += "\t" + tmp + Environment.NewLine;
-                        if (tmp.Length > 0)
-                        {
-                            currentProperty = tmp;
-                        }
-                        saveProperty(currentProperty, "1");
-                    }
-                    currentProperty = tmp;
-                    cardinalityCounter = 0;
-                    cardinality = "";
-                    prevWasChecked = false;
-                }
-                if (repeatedProperty)
-                {
-                    offset++;
-                    k--;
+                    valueSet = "";
+                    cardinalityCounter = 1;
                 }
                 else
                 {
-                    offset = 0;
+                    cardinalityCounter++;
+                    saveProperty(currentProperty, cardinalityCounter.ToString());
+                    cardinalityCounter = 0;
                 }
+                samples++;
+                firstTime = true;
+                newSample = true;
+                currentSubject = t.Subject.ToString();
             }
-            i = 0;
-            foreach (string key in propertyDictionary.Keys)
+
+            if (k == 0 || firstTime)
             {
-                requestedMin = "";
-                requestedMax = "";
-                tmp = "";
-                cardinalityIndex = 0;
-                countListItems = false;
-                currIsChecked = isPropertyChecked(key, true);
-                cardinality = (currIsChecked) ? "valueSet" : getRequestedCardinality(i);
-                if (cardinality == "error" || cardinality == "N/A" || cardinality == "valueSet")
+                targetSubject = HttpUtility.UrlEncode(HttpUtility.HtmlEncode(getPropertysQName(t.Subject.ToString())));
+            }
+            cardinalityCounter++;
+            propertyCounter++;
+            tmp = "";
+            currIsChecked = false;
+            propertyForRecord = getPropertysQName(t.Predicate.ToString());
+            repeatedProperty = (propertyRepeatTimes(t.Subject.ToString(), t.Predicate.ToString()) > offset);
+            propertyValue = getPropertysQName(t.Object.ToString());
+
+            currIsChecked = isPropertyChecked(propertyForRecord);
+            if (!currIsChecked)
+            {
+                test = hasLanguageTag(propertyValue);
+                if (t.Object.NodeType == NodeType.Literal && test.Answer == true)
                 {
-                    if (cardinality == "valueSet")
+                    tmp = propertyForRecord + " [" + test.Contents.TrimStart('"') + "]";
+                }
+                else if (t.Object.NodeType == NodeType.Literal && (test = hasStringProperty(t.Object.ToString())).Answer == true)
+                {
+                    tmp = propertyForRecord + " xsd:string";
+                }
+                else if (t.Object.NodeType == NodeType.Literal && hasDateProperty(t.Object.ToString()))
+                {
+                    tmp = propertyForRecord + " xsd:date";
+                }
+                else if (t.Object.NodeType == NodeType.Literal && hasIntegerProperty(t.Object.ToString()))
+                {
+                    tmp = propertyForRecord + " xsd:integer";
+                    hasNumericValues = true;
+                }
+                else if (t.Object.NodeType == NodeType.Literal && hasDecimalProperty(t.Object.ToString()))
+                {
+                    tmp = propertyForRecord + " xsd:decimal";
+                    hasNumericValues = true;
+                }
+                else if (t.Object.NodeType == NodeType.Uri && (test = hasIRIWithPrefix(propertyValue)).Answer == true)
+                {
+                        if (propertyForRecord == "rdf:type")
+                        {
+                            propertyForRecord = "a";
+                        }
+                        tmp = propertyForRecord + ((propertyForRecord == "a") ? " [" + test.Contents + "]" : " IRI");
+                }
+                else if (t.Object.NodeType == NodeType.Uri)
+                {
+                    tmp = propertyForRecord + " IRI";
+                }
+                else if (t.Object.NodeType == NodeType.Blank)
+                {
+                    /*if ((test = hasBlankNode(t.Subject.ToString(), t.Predicate.ToString(), t.Object.ToString())).Answer == true)
                     {
-                        cardinality = "[" + filterUnique(propertyDictionary[key]) + "]";
-                        countListItems = true;
-                        tmp = getRequestedCardinality(i);
-                        if (tmp.Length > 0 && tmp != "N/A")
-                        {
-                            cardinality += tmp;
-                            stringParts = tmp.Trim(removeBrackets).Split(',');
-                            if (stringParts.Length == 2)
-                            {
-                                requestedMin = stringParts[0];
-                                requestedMax = stringParts[1];
-                                cardinalityIndex = 0;
-                            }
-                            else if (stringParts[0] == "?")
-                            {
-                                requestedMin = "0";
-                                requestedMax = "1";
-                                cardinalityIndex = 2;
-                            }
-                            else if (stringParts[0] == "*")
-                            {
-                                requestedMin = "0";
-                                cardinalityIndex = 3;
-                            }
-                            else if (stringParts[0] == "+")
-                            {
-                                requestedMin = "1";
-                                cardinalityIndex = 4;
-                            }
-                            else
-                            {
-                                requestedMin = requestedMax = stringParts[0];
-                                cardinalityIndex = (requestedMin == "1") ? 1 : 0;
-                            }
-                        }
-                        else if (tmp.Length == 0)
-                        {
-                            cardinalityIndex = 1;
-                        }
+                        tmp = propertyForRecord + " " + test.Contents;
                     }
                     else
                     {
-                        cardinality = "";
-                    }
+                        tmp = propertyForRecord + " BNode";
+                    }*/
+                    tmp = propertyForRecord + " BNode";
+                }
 
-                    if (cardinalityIndex == 0 && (tmp.Length == 0 || tmp == "N/A"))
+                if (tmp.Length == 0)
+                {
+                    error = "Unrecognized property's value! (" + lastTestedPropertyValue + ")";
+                    break;
+                }
+            }
+            else
+            {
+                tmp = propertyForRecord;
+            }
+
+            if (k == 0 || newSample)
+            {
+                currentProperty = tmp;
+                newSample = false;
+                if (currIsChecked)
+                {
+                    valueSet = propertyValue;
+                    prevWasChecked = true;
+                }
+            }
+            else if (currIsChecked)
+            {
+                if (firstTime && cardinalityCounter > 1)
+                {
+                    firstTime = false;
+                    cardinalityCounter--;
+                }
+                if (!prevWasChecked)
+                {
+                    saveProperty(currentProperty, cardinalityCounter.ToString());
+                    currentProperty = tmp;
+                    valueSet = propertyValue;
+                    prevWasChecked = true;
+                    cardinalityCounter = 0;
+                }
+                else if (currentProperty == tmp)
+                {
+                    valueSet += " " + propertyValue;
+                }
+                else
+                {
+                    saveProperty(currentProperty, valueSet);
+                    currentProperty = tmp;
+                    valueSet = propertyValue;
+                }
+                if (tmp.Length == 0)
+                {
+                    break;
+                }
+            }
+            if ((!currIsChecked && currentProperty != tmp) || (k == g.Triples.Count - 1 - blankNodes && !repeatedProperty))
+            {
+                if (prevWasChecked)
+                {
+                    saveProperty(currentProperty, valueSet);
+                    currentProperty = tmp;
+                    valueSet = "";
+                    cardinalityCounter = 1;
+                }
+                if (firstTime && cardinalityCounter > 1)
+                {
+                    firstTime = false;
+                    cardinalityCounter--;
+                }
+                if (currentProperty == tmp && k == g.Triples.Count - 1 - blankNodes && !repeatedProperty && !firstTime)
+                {
+                    cardinalityCounter++;
+                }
+                if (cardinalityCounter > 1)
+                {
+                    cardinality = "{" + cardinalityCounter + "}";
+                }
+                if (currentProperty.Length > 0 && !prevWasChecked)
+                {
+                    saveProperty(currentProperty, cardinalityCounter.ToString());
+                }
+                if (currentProperty != tmp && k == g.Triples.Count - 1 - blankNodes && !repeatedProperty)
+                {
+                    if (tmp.Length > 0)
                     {
-                        if (propertyDictionary[key].Count < samples)
+                        currentProperty = tmp;
+                    }
+                    saveProperty(currentProperty, "1");
+                }
+                currentProperty = tmp;
+                cardinalityCounter = 0;
+                cardinality = "";
+                prevWasChecked = false;
+            }
+            if (repeatedProperty)
+            {
+                offset++;
+            }
+            else
+            {
+                offset = 1;
+            }
+        }
+        i = 0;
+        foreach (string key in propertyDictionary.Keys)
+        {
+            requestedMin = "";
+            requestedMax = "";
+            tmp = "";
+            cardinalityIndex = 0;
+            countListItems = false;
+            currIsChecked = isPropertyChecked(key, true);
+            cardinality = (currIsChecked) ? "valueSet" : getRequestedCardinality(i);
+            if (cardinality == "error" || cardinality == "N/A" || cardinality == "valueSet")
+            {
+                if (cardinality == "valueSet")
+                {
+                    cardinality = "[" + filterUnique(propertyDictionary[key]) + "]";
+                    countListItems = true;
+                    tmp = getRequestedCardinality(i);
+                    if (tmp.Length > 0 && tmp != "N/A")
+                    {
+                        cardinality += tmp;
+                        stringParts = tmp.Trim(removeBrackets).Split(',');
+                        if (stringParts.Length == 2)
                         {
-                            min = 0;
+                            requestedMin = stringParts[0];
+                            requestedMax = stringParts[1];
+                            cardinalityIndex = 0;
+                        }
+                        else if (stringParts[0] == "?")
+                        {
+                            requestedMin = "0";
+                            requestedMax = "1";
+                            cardinalityIndex = 2;
+                        }
+                        else if (stringParts[0] == "*")
+                        {
+                            requestedMin = "0";
+                            cardinalityIndex = 3;
+                        }
+                        else if (stringParts[0] == "+")
+                        {
+                            requestedMin = "1";
+                            cardinalityIndex = 4;
                         }
                         else
                         {
-                            min = getMinValue(propertyDictionary[key], countListItems);
-                        }
-                        max = getMaxValue(propertyDictionary[key], countListItems);
-
-                        if (min == 0 && max == 1)
-                        {
-                            cardinality += "?";
-                        }
-                        else if (min == 0 && max > 1)
-                        {
-                            cardinality += "*";
-                        }
-                        else if (min == 1 && max > 1)
-                        {
-                            cardinality += "+";
-                        }
-                        else if (min == max && min != 1 && key[key.Length - 1] != ']')
-                        {
-                            cardinality += "{" + min + "}";
-                        }
-                        else if (min < max)
-                        {
-                            cardinality += "{" + min + "," + max + "}";
+                            requestedMin = requestedMax = stringParts[0];
+                            cardinalityIndex = (requestedMin == "1") ? 1 : 0;
                         }
                     }
-
-                        tmp = "";
-
+                    else if (tmp.Length == 0)
+                    {
+                        cardinalityIndex = 1;
+                    }
                 }
-                else if (cardinality.Length > 0)
+                else
                 {
-                    stringParts = cardinality.Trim(removeBrackets).Split(',');
-                    if (stringParts.Length == 2)
+                    cardinality = "";
+                }
+
+                if (cardinalityIndex == 0 && (tmp.Length == 0 || tmp == "N/A"))
+                {
+                    if (propertyDictionary[key].Count < samples)
                     {
-                        requestedMin = stringParts[0];
-                        requestedMax = stringParts[1];
-                        cardinalityIndex = 0;
-                    }
-                    else if (stringParts[0] == "?")
-                    {
-                        requestedMin = "0";
-                        requestedMax = "1";
-                        cardinalityIndex = 2;
-                    }
-                    else if (stringParts[0] == "*")
-                    {
-                        requestedMin = "0";
-                        cardinalityIndex = 3;
-                    }
-                    else if (stringParts[0] == "+")
-                    {
-                        requestedMin = "1";
-                        cardinalityIndex = 4;
+                        min = 0;
                     }
                     else
                     {
-                        requestedMin = requestedMax = stringParts[0];
-                        cardinalityIndex = (requestedMin == "1") ? 1 : 0;
+                        min = getMinValue(propertyDictionary[key], countListItems);
+                    }
+                    max = getMaxValue(propertyDictionary[key], countListItems);
+
+                    if (min == 0 && max == 1)
+                    {
+                        cardinality += "?";
+                    }
+                    else if (min == 0 && max > 1)
+                    {
+                        cardinality += "*";
+                    }
+                    else if (min == 1 && max > 1)
+                    {
+                        cardinality += "+";
+                    }
+                    else if (min == max && min != 1 && key[key.Length - 1] != ']')
+                    {
+                        cardinality += "{" + min + "}";
+                    }
+                    else if (min < max)
+                    {
+                        cardinality += "{" + min + "," + max + "}";
                     }
                 }
 
-                range = getRange(i, Property.hasDecimalProperty2(key));
-                if (!currIsChecked && !range.Is_empty)
-                {
-                    if (range.Min_value.Length > 0)
-                    {
-                        tmp = " " + range.Min_type + " " + range.Min_value;
-                    }
-                    if (range.Max_value.Length > 0)
-                    {
-                        tmp += " " + range.Max_type + " " + range.Max_value;
-                    }
-                }
+                    tmp = "";
 
-                record += Environment.NewLine + "\t" + key + tmp + ((cardinality.Length > 0) ? " " : "") + cardinality + ";";
-                foundProperties.Add(new Property(i, HttpUtility.HtmlEncode(key + tmp + ((cardinality.Length > 0) ? " " : "") + cardinality), currIsChecked, requestedMin, requestedMax, cardinalityIndex, range));
-                i++;
             }
-            record = record.TrimEnd(';') + Environment.NewLine;
-            record += "}" + Environment.NewLine;
+            else if (cardinality.Length > 0)
+            {
+                stringParts = cardinality.Trim(removeBrackets).Split(',');
+                if (stringParts.Length == 2)
+                {
+                    requestedMin = stringParts[0];
+                    requestedMax = stringParts[1];
+                    cardinalityIndex = 0;
+                }
+                else if (stringParts[0] == "?")
+                {
+                    requestedMin = "0";
+                    requestedMax = "1";
+                    cardinalityIndex = 2;
+                }
+                else if (stringParts[0] == "*")
+                {
+                    requestedMin = "0";
+                    cardinalityIndex = 3;
+                }
+                else if (stringParts[0] == "+")
+                {
+                    requestedMin = "1";
+                    cardinalityIndex = 4;
+                }
+                else
+                {
+                    requestedMin = requestedMax = stringParts[0];
+                    cardinalityIndex = (requestedMin == "1") ? 1 : 0;
+                }
+            }
+
+            range = getRange(i, Property.hasDecimalProperty2(key));
+            if (!currIsChecked && !range.Is_empty)
+            {
+                if (range.Min_value.Length > 0)
+                {
+                    tmp = " " + range.Min_type + " " + range.Min_value;
+                }
+                if (range.Max_value.Length > 0)
+                {
+                    tmp += " " + range.Max_type + " " + range.Max_value;
+                }
+            }
+
+            record += Environment.NewLine + "\t" + key + tmp + ((cardinality.Length > 0) ? " " : "") + cardinality + ";";
+            foundProperties.Add(new Property(i, HttpUtility.HtmlEncode(key + tmp + ((cardinality.Length > 0) ? " " : "") + cardinality), currIsChecked, requestedMin, requestedMax, cardinalityIndex, range));
+            i++;
         }
+        record = record.TrimEnd(';') + Environment.NewLine;
+        record += "}" + Environment.NewLine;
 
         if (error.Length == 0)
         {
@@ -553,8 +577,7 @@ public partial class _Default : Page
 
     private Result hasStringProperty(string property)
     {
-        //Regex quoteRegex = new Regex(@"""[^""\\]*(?:\\.[^""\\]*)*""$");
-        MatchCollection matches = quoteRegex.Matches(property);
+        MatchCollection matches = quoteRegex.Matches('"' + property + '"');
         lastTestedPropertyValue = property;
         if (matches.Count > 0)
         {
@@ -562,11 +585,11 @@ public partial class _Default : Page
             foreach (Match match in matches)
             {
                 if (
-                    (property.IndexOf("^^xsd:date") != -1 && hasDateProperty(match.ToString() + "^^xsd:date"))
+                    property.IndexOf("^^http://www.w3.org/2001/XMLSchema#date") != -1
                     ||
-                    property.IndexOf("^^xsd:integer") == property.Length - 13
+                    property.IndexOf("^^http://www.w3.org/2001/XMLSchema#integer") != -1
                     ||
-                    property.IndexOf("^^xsd:decimal") == property.Length - 13
+                    property.IndexOf("^^http://www.w3.org/2001/XMLSchema#decimal") != -1
                 )
                 {
                     return new Result(false, "N/A");
@@ -580,18 +603,14 @@ public partial class _Default : Page
 
     private bool hasIntegerProperty(string property)
     {
-        Regex integerRegex = new Regex(@"\s(\+|-)?\d+$");
-        MatchCollection matches = integerRegex.Matches(property);
         lastTestedPropertyValue = property;
-        return (matches.Count > 0 || (property.Length > 13 && property.IndexOf("^^xsd:integer") == property.Length - 13));
+        return (property.IndexOf("^^http://www.w3.org/2001/XMLSchema#integer") != -1);
     }
 
     private bool hasDecimalProperty(string property)
     {
-        Regex decimalRegex = new Regex(@"^(\+|-)?([0-9]+(\.[0-9]*)?|\.[0-9]+),?(\s(\+|-)?([0-9]+(\.[0-9]*)?|\.[0-9]+))*$");
-        MatchCollection matches = decimalRegex.Matches(property);
         lastTestedPropertyValue = property;
-        return (matches.Count > 0 || (property.Length > 13 && property.IndexOf("^^xsd:decimal") == property.Length - 13));
+        return (property.IndexOf("^^http://www.w3.org/2001/XMLSchema#decimal") != -1);
     }
 
     private bool hasIriProperty(string property)
@@ -604,10 +623,8 @@ public partial class _Default : Page
 
     private bool hasDateProperty(string property)
     {
-        Regex dateRegex = new Regex(@"""(([1-9][0-9]|[1-9])\d{2})-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])""\^\^xsd:date,?(""(([1-9][0-9]|[1-9])\d{2})-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])""\^\^xsd:date)*");
-        MatchCollection matches = dateRegex.Matches(property);
         lastTestedPropertyValue = property;
-        return (matches.Count > 0);
+        return (property.IndexOf("^^http://www.w3.org/2001/XMLSchema#date") != -1);
     }
 
     private Result hasIRIWithPrefix(string property)
@@ -628,16 +645,33 @@ public partial class _Default : Page
 
     private Result hasLanguageTag(string property)
     {
-        Regex tagRegex = new Regex(@"[""\\]@[a-z]{2}$");
+        Regex tagRegex = new Regex(@"@[a-z]{2}(-[a-zA-Z]{2})?""?$");
         MatchCollection matches = tagRegex.Matches(property);
         if (matches.Count > 0)
         {
             string tmp = "";
             foreach (Match match in matches)
             {
-                tmp += match.Value + "~";
+                tmp += match.Value.TrimEnd('"') + "~";
             }
             return new Result(true, tmp);
+        }
+        return new Result(false, "N/A");
+    }
+
+    private Result hasBlankNode(string subject, string predicate, string objectName)
+    {
+        string q = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> SELECT ?o WHERE { <" + subject + "> <" + predicate + "> " + objectName + " . " + objectName + " rdf:type ?o . }";
+        SparqlQuery query = sparqlparser.ParseFromString(q);
+        Object results = processor.ProcessQuery(query);
+
+        if (results is SparqlResultSet)
+        {
+            SparqlResultSet rset = (SparqlResultSet)results;
+            foreach (SparqlResult result in rset)
+            {
+                return new Result(true, getPropertysQName(result.ToString().Substring(5)));
+            }
         }
         return new Result(false, "N/A");
     }
@@ -680,6 +714,17 @@ public partial class _Default : Page
             {
                 stringMatch = match.ToString();
                 value = getPrefix(stringMatch.TrimEnd(':'));
+                if (value.Length == 0)
+                {
+                    try
+                    {
+                        value = "<" + g.NamespaceMap.GetNamespaceUri(stringMatch.TrimEnd(':')).ToString() + ">";
+                    }
+                    catch(RdfException ex)
+                    {
+                        value = "";
+                    }
+                }
                 if (value.Length > 0 && !addedPrefixes.Contains(stringMatch))
                 {
                     prefixes += "PREFIX " + match + " " + value + Environment.NewLine;
@@ -693,10 +738,16 @@ public partial class _Default : Page
         }
     }
 
-    private string[] splitAndClear(string text)
+    private string[] splitAndClear(string text, char splitter = ' ')
     {
         string trimmedString = text.Trim(removeSymbols);
-        string[] stringParts = trimmedString.Split(' ');
+        string[] stringParts = trimmedString.Split(splitter);
+        int i = 0;
+        foreach (string tmp in stringParts)
+        {
+            stringParts[i] = tmp.Trim();
+            i++;
+        }
         return Array.FindAll(stringParts, part => part.Length > 0);
     }
 
@@ -1024,14 +1075,23 @@ public partial class _Default : Page
 
     private string filterUnique(List<string> list)
     {
-        MatchCollection matches;
+        MatchCollection matches, tagMatches;
+        Regex tagRegex = new Regex(@"""(.+)""@[a-z]{2}(-[a-zA-Z]{2})?""?$");
         List<string> newList = new List<string>();
         char separator;
 
         foreach (string item in list)
         {
             matches = quoteRegex.Matches(item);
-            if (matches.Count > 0 && item.IndexOf("^^xsd:date") == -1 && item.IndexOf("^^xsd:integer") == -1 && item.IndexOf("^^xsd:decimal") == -1)
+            tagMatches = tagRegex.Matches(item);
+            if (tagMatches.Count > 0)
+            {
+                foreach (Match match in tagMatches)
+                {
+                    newList.Add(match.Value);
+                }
+            }
+            else if (matches.Count > 0 && hasLanguageTag(item).Answer == false && item.IndexOf("^^xsd:date") == -1 && item.IndexOf("^^xsd:integer") == -1 && item.IndexOf("^^xsd:decimal") == -1)
             {
                 foreach (Match match in matches)
                 {
@@ -1066,6 +1126,51 @@ public partial class _Default : Page
         Regex integerRegex = new Regex(@"\s\d+$");
         MatchCollection matches = integerRegex.Matches(text);
         return matches.Count;
+    }
+
+    private string getPropertysQName(string uri)
+    {
+        string qName;
+        Result test;
+        if (g.NamespaceMap.ReduceToQName(uri, out qName))
+        {
+            return (qName == "rdf:type")? "a" : qName;
+        }
+        if ((test = hasLanguageTag(uri)).Answer == true)
+        {
+            return '"' + uri.Substring(0, uri.Length - test.Contents.Length) + '"' + uri.Substring(uri.Length - test.Contents.Length);
+        }
+        if (uri.IndexOf("://") == -1 && hasStringProperty(uri).Answer == true)
+        {
+            return '"' + uri + '"';
+        }
+        if (hasIntegerProperty(uri))
+        {
+            return uri.Replace("^^http://www.w3.org/2001/XMLSchema#integer", "");
+        }
+        if (hasDecimalProperty(uri))
+        {
+            return uri.Replace("^^http://www.w3.org/2001/XMLSchema#decimal", "");
+        }
+        if (hasDateProperty(uri))
+        {
+            return '"' + uri.Replace("^^http://www.w3.org/2001/XMLSchema#date", "") + "\"^^xsd:date";
+        }
+        return (uri.IndexOf("://") != -1 && uri.IndexOf("^^") == -1) ? "<" + uri + ">" : uri;
+    }
+
+    private int propertyRepeatTimes(string subject, string predicate)
+    {
+        string q = "SELECT COUNT(?o) AS ?count WHERE { <" + subject + "> <" + predicate + "> ?o . } GROUP BY ?o";
+        SparqlQuery query = sparqlparser.ParseFromString(q);
+        Object results = processor.ProcessQuery(query);
+
+        if (results is SparqlResultSet)
+        {
+            SparqlResultSet rset = (SparqlResultSet)results;
+            return rset.Count;
+        }
+        return 0;
     }
 
     protected void SampleList_SelectedIndexChanged(object sender, EventArgs e)

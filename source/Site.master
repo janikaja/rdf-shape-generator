@@ -63,7 +63,7 @@
             <div class="footer">
                 <hr />
                 <footer>
-                    <p>&copy; <%: DateTime.Now.Year %> - Jānis Kajaks</p>
+                    <p>&copy; <%: DateTime.Now.Year %> Jānis Kajaks</p>
                 </footer>
             </div>
         </div>

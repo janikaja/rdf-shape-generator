@@ -8,6 +8,10 @@ body, html {
     min-height: 100vh;
 }
 
+h1 {
+    font-size: 24px;
+}
+
 /* Wrapping element */
 /* Set some basic padding to keep content from hitting the edges */
 .body-content {
@@ -17,8 +21,7 @@ body, html {
 }
 
 /* Set widths on the form inputs since otherwise they're 100% wide */
-input,
-select {
+input {
     max-width: 280px;
 }
 input[type="number"] {
@@ -140,6 +143,7 @@ pre {
 }
 .navbar-inverse .navbar-nav .menuItem {
     color: grey;
+    transition: all linear 0.3s;
 }
 
 .footer {
@@ -148,10 +152,17 @@ pre {
     width: calc(100% - 30px);
 }
 
+.jumbotron {
+    margin-top: 15px;
+    padding: 1px 30px;
+}
+
 /* Responsive: Portrait tablets and up */
 @media screen and (min-width: 768px) {
+    select {
+        max-width: 280px;
+    }
     .jumbotron {
-        margin-top: 20px;
         padding-top: 26px;
         padding-bottom: 26px;
     }

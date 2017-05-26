@@ -7,7 +7,7 @@
         <p class="lead">Welcome to ShExC schema creator tool!</p>
     </div>
 
-    <p class="about">This tool accepts RDF data (in Turtle serialization) as an input and automatically generates a ShExC schema that can be used for validation.</p>
+    <p class="about">This tool accepts RDF data (Turtle, N-Triples, RDF/XML and RDF/JSON serializations) as an input and automatically generates a ShExC schema that can be used for validation.</p>
     <p class="about">You can find more detailed instructions in <a href="About">&quot;About&quot;</a> section.</p>
     <p class="prompt">Please, enter RDF data manually or select sample data:</p>
     <asp:DropDownList CssClass="form-control" ID="SampleList" OnSelectedIndexChanged="SampleList_SelectedIndexChanged" AutoPostBack="true" runat="server"></asp:DropDownList>
@@ -56,9 +56,11 @@
                                 </label>
                         </td>
                         <td class="checkboxes">
-                            <label>
-                                <input id="Checkbox<%= item.Index %>" type="checkbox" name="getValueSet[]" value="<%= item.Name %>" <% if (item.Is_checked) { %> checked <% } %> />
-                            </label>
+                            <% if (!item.hasBlankNode()) { %>
+                                <label>
+                                    <input id="Checkbox<%= item.Index %>" type="checkbox" name="getValueSet[]" value="<%= item.Name %>" <% if (item.Is_checked) { %> checked <% } %> />
+                                </label>
+                            <% } %>
                         </td>
                         <% if (hasNumericValues) { %>
                             <td>
@@ -93,7 +95,9 @@
                 <asp:TextBox ID="resultText" TextMode="multiline" Columns="50" Rows="10" ReadOnly="true" runat="server"></asp:TextBox>
             </div>
         </div>
-        <a href="http://rawgit.com/shexSpec/shex.js/master/doc/shex-simple.html?interface=simple&schema=<%= encodedSchema %>&data=<%= encodedData %>&shape-map=<%= targetSubject %>%40my%3ASchema" target="_blank">Test RDF data and ShExC schema in a validator (https://github.com/shexSpec/shex.js)</a>
+        <% if (!hideValidatorLink) { %>
+            <a href="http://rawgit.com/shexSpec/shex.js/master/doc/shex-simple.html?interface=simple&schema=<%= encodedSchema %>&data=<%= encodedData %>&shape-map=<%= targetSubject %>%40my%3ASchema" target="_blank">Test RDF data and ShExC schema in a validator (https://github.com/shexSpec/shex.js)</a>
+        <% } %>
     <% } else if (!additionalInfoRequired) { %>
         <asp:Button ID="Button1" runat="server" Text="Create ShExC schema" />
     <% } %>

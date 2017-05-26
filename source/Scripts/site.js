@@ -2,9 +2,9 @@
 var $table = $('#foundPropertiesHeading');
 
 if ($table.length) {
-    $('html, body').animate({
-        scrollTop: $table.offset().top - 60
-    }, 100);
+    scrollTo($table);
+} else if (sourceContents.length) {
+    scrollTo($source);
 }
 
 $('.cardinalities').on('change', function () {
@@ -23,3 +23,9 @@ $source.on('keyup', function () {
         $('#MainContent_Button2').hide();
     }
 });
+
+function scrollTo($element) {
+    $('html, body').animate({
+        scrollTop: $element.offset().top - 60
+    }, 100);
+}
